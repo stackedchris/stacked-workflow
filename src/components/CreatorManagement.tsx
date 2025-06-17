@@ -35,7 +35,6 @@ import {
 } from 'lucide-react'
 import { TikTokIcon, InstagramIcon, TwitterIcon, YouTubeIcon } from '@/components/ui/icons'
 import AssetUpload from './AssetUpload'
-import SocialScraper from './SocialScraper'
 import PhaseManager from './PhaseManager'
 import { useToast } from '@/components/ui/toast'
 
@@ -443,12 +442,11 @@ export default function CreatorManagement({
         <div className="lg:col-span-3">
           {selectedCreator ? (
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid w-full grid-cols-6">
+              <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="assets">Assets</TabsTrigger>
                 <TabsTrigger value="strategy">Strategy</TabsTrigger>
                 <TabsTrigger value="progress">Progress</TabsTrigger>
-                <TabsTrigger value="social">Social Intel</TabsTrigger>
                 <TabsTrigger value="settings">Settings</TabsTrigger>
               </TabsList>
 
@@ -802,14 +800,6 @@ export default function CreatorManagement({
                 />
               </TabsContent>
 
-              <TabsContent value="social" className="space-y-6">
-                <SocialScraper
-                  creatorId={selectedCreator.id}
-                  creatorName={selectedCreator.name}
-                  socialMedia={selectedCreator.socialMedia}
-                />
-              </TabsContent>
-
               <TabsContent value="settings" className="space-y-6">
                 <Card>
                   <CardHeader>
@@ -1052,7 +1042,6 @@ export default function CreatorManagement({
                 <ul className="text-sm text-red-700 mt-1 space-y-1">
                   <li>• Creator profile and contact information</li>
                   <li>• Pipeline progress and phase history</li>
-                  <li>• Social media data and analytics</li>
                   <li>• All uploaded assets and documents</li>
                   <li>• Strategy notes and content plans</li>
                 </ul>

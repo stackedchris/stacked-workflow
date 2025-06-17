@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Database,
@@ -21,7 +22,10 @@ import {
   Users,
   Calendar,
   Table,
-  Copy
+  Copy,
+  Sparkles,
+  Zap,
+  Rocket
 } from 'lucide-react'
 import { AirtableService } from '@/lib/airtable'
 
@@ -44,6 +48,11 @@ interface AirtableIntegrationProps {
   onSyncComplete?: (success: boolean) => void
 }
 
+interface Workspace {
+  id: string
+  name: string
+}
+
 export default function AirtableIntegration({
   creators = [],
   content = [],
@@ -64,6 +73,13 @@ export default function AirtableIntegration({
 
   const [lastSync, setLastSync] = useState<string>('')
   const [syncCount, setSyncCount] = useState(0)
+  
+  // Auto-template creation state
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([])
+  const [selectedWorkspace, setSelectedWorkspace] = useState('')
+  const [baseName, setBaseName] = useState('Stacked Creator Pipeline')
+  const [isCreatingBase, setIsCreatingBase] = useState(false)
+  const [creationProgress, setCreationProgress] = useState('')
 
   // Auto-sync when enabled and data changes
   useEffect(() => {
@@ -75,6 +91,85 @@ export default function AirtableIntegration({
       return () => clearInterval(autoSyncInterval)
     }
   }, [autoSync, config.isConnected, creators, content])
+
+  // Load workspaces when API key is provided
+  const loadWorkspaces = async (apiKey: string) => {
+    try {
+      const response = await fetch(`/api/airtable/get-workspaces?apiKey=${encodeURIComponent(apiKey)}`)
+      const result = await response.json()
+      
+      if (result.success) {
+        setWorkspaces(result.workspaces)
+        if (result.workspaces.length > 0) {
+          setSelectedWorkspace(result.workspaces[0].id)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load workspaces:', error)
+    }
+  }
+
+  // Auto-create Airtable base with template
+  const handleAutoCreateBase = async () => {
+    if (!config.apiKey || !selectedWorkspace || !baseName) {
+      alert('Please provide API key, select workspace, and enter base name')
+      return
+    }
+
+    setIsCreatingBase(true)
+    setCreationProgress('Creating Airtable base...')
+
+    try {
+      const response = await fetch('/api/airtable/create-base', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          apiKey: config.apiKey,
+          workspaceId: selectedWorkspace,
+          baseName: baseName,
+          creators: creators
+        }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        setCreationProgress('Base created successfully!')
+        
+        // Auto-connect to the new base
+        setConfig(prev => ({
+          ...prev,
+          baseId: result.baseId,
+          isConnected: true
+        }))
+
+        alert(`🎉 Success! Your Airtable base "${baseName}" has been created with:
+
+✅ Complete field structure (${creators.length > 0 ? '26+' : '22'} fields)
+✅ All creator data imported (${result.recordsCreated} records)
+✅ Pre-configured views (Pipeline, Revenue, Calendar, etc.)
+✅ Formula fields (Revenue, Progress %)
+✅ Proper field types and validation
+
+🔗 View your base: ${result.baseUrl}
+
+The platform is now automatically connected to your new base!`)
+
+        setLastSync(new Date().toLocaleString())
+        setSyncCount(1)
+      } else {
+        alert(`❌ Failed to create base: ${result.error}`)
+      }
+    } catch (error) {
+      console.error('Base creation failed:', error)
+      alert('❌ Base creation failed: Network error')
+    } finally {
+      setIsCreatingBase(false)
+      setCreationProgress('')
+    }
+  }
 
   const handleConnect = async () => {
     if (!config.apiKey || !config.baseId || !config.tableName) return
@@ -408,23 +503,155 @@ ${content?.length ? `• Content CSV - ${content.length} items ready for import`
         </Card>
       )}
 
-      <Tabs defaultValue={config.isConnected ? "sync" : "setup"} className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="setup">Setup</TabsTrigger>
-          <TabsTrigger value="sync">Sync Data</TabsTrigger>
-          <TabsTrigger value="export">Export/Import</TabsTrigger>
-          <TabsTrigger value="template">Template</TabsTrigger>
+      <Tabs defaultValue={config.isConnected ? "sync" : "auto-create"} className="space-y-6">
+        <TabsList className="grid w-full grid-cols-5 h-12">
+          <TabsTrigger value="auto-create" className="text-sm">🚀 Auto-Create</TabsTrigger>
+          <TabsTrigger value="setup" className="text-sm">Setup</TabsTrigger>
+          <TabsTrigger value="sync" className="text-sm">Sync Data</TabsTrigger>
+          <TabsTrigger value="export" className="text-sm">Export/Import</TabsTrigger>
+          <TabsTrigger value="template" className="text-sm">Template</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="auto-create">
+          <Card className="bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200">
+            <CardHeader>
+              <CardTitle className="flex items-center text-blue-900">
+                <Sparkles className="w-6 h-6 mr-2" />
+                🚀 Auto-Create Airtable Base with Template
+              </CardTitle>
+              <CardDescription className="text-blue-700">
+                Automatically create a complete Airtable base with all fields, views, formulas, and your creator data!
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="bg-white p-4 rounded-lg border border-blue-200">
+                <h4 className="font-medium text-blue-900 mb-2">✨ What This Creates:</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-blue-800">
+                  <div>
+                    <strong>📊 Complete Database Structure:</strong>
+                    <ul className="mt-1 space-y-1">
+                      <li>• 26+ properly typed fields</li>
+                      <li>• Formula fields (Revenue, Progress %)</li>
+                      <li>• Select options with colors</li>
+                      <li>• URL, email, phone validation</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <strong>🎯 Pre-configured Views:</strong>
+                    <ul className="mt-1 space-y-1">
+                      <li>• Pipeline Dashboard (grouped by phase)</li>
+                      <li>• Revenue Tracking (by category)</li>
+                      <li>• High Priority (urgent creators)</li>
+                      <li>• Launch Calendar (timeline view)</li>
+                    </ul>
+                  </div>
+                </div>
+                <div className="mt-3 p-2 bg-blue-100 rounded text-sm text-blue-700">
+                  <strong>⚡ Result:</strong> Professional database ready in 30 seconds with {creators.length} creators imported!
+                </div>
+              </div>
+
+              {!config.isConnected && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Airtable API Key *</label>
+                    <Input
+                      type="password"
+                      value={config.apiKey}
+                      onChange={(e) => {
+                        setConfig(prev => ({ ...prev, apiKey: e.target.value }))
+                        if (e.target.value.length > 10) {
+                          loadWorkspaces(e.target.value)
+                        }
+                      }}
+                      placeholder="pat..."
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Get your API key from: <a href="https://airtable.com/create/tokens" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Airtable Developer Hub</a>
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Workspace *</label>
+                    <Select value={selectedWorkspace} onValueChange={setSelectedWorkspace}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select workspace" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {workspaces.map((workspace) => (
+                          <SelectItem key={workspace.id} value={workspace.id}>
+                            {workspace.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {workspaces.length === 0 ? 'Enter API key to load workspaces' : `${workspaces.length} workspace(s) available`}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Base Name *</label>
+                    <Input
+                      value={baseName}
+                      onChange={(e) => setBaseName(e.target.value)}
+                      placeholder="Stacked Creator Pipeline"
+                    />
+                  </div>
+
+                  <Button 
+                    onClick={handleAutoCreateBase}
+                    disabled={!config.apiKey || !selectedWorkspace || !baseName || isCreatingBase}
+                    className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
+                    size="lg"
+                  >
+                    {isCreatingBase ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                        {creationProgress || 'Creating...'}
+                      </>
+                    ) : (
+                      <>
+                        <Rocket className="w-4 h-4 mr-2" />
+                        🚀 Create Complete Airtable Base ({creators.length} creators)
+                      </>
+                    )}
+                  </Button>
+
+                  <div className="text-center">
+                    <p className="text-sm text-gray-600 mb-2">Or use manual setup below</p>
+                    <Button variant="outline" onClick={handleTestMode}>
+                      <Zap className="w-4 h-4 mr-2" />
+                      Demo Mode (Test Without API)
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {config.isConnected && (
+                <div className="text-center py-8">
+                  <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-4" />
+                  <h3 className="text-xl font-semibold text-green-900 mb-2">Base Connected Successfully!</h3>
+                  <p className="text-green-700 mb-4">Your Airtable base is ready and syncing.</p>
+                  <Button onClick={() => window.open(`https://airtable.com/${config.baseId}`, '_blank')}>
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    Open Airtable Base
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <TabsContent value="setup">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center">
                 <Settings className="w-5 h-5 mr-2" />
-                Airtable Configuration
+                Manual Airtable Configuration
               </CardTitle>
               <CardDescription>
-                Connect your Stacked workflow to Airtable bases
+                Connect to an existing Airtable base
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -806,7 +1033,7 @@ ${content?.length ? `• Content CSV - ${content.length} items ready for import`
                   <ul className="text-sm text-gray-600 space-y-1">
                     <li>• <strong>Pipeline Dashboard:</strong> Group by Phase, sort by Days in Phase</li>
                     <li>• <strong>Revenue Tracking:</strong> Group by Category, sort by Revenue</li>
-                    <li>• <strong>High Priority:</strong> Filter for Low velocity or &gt;7 days in phase</li>
+                    <li>• <strong>High Priority:</strong> Filter for Low velocity or >7 days in phase</li>
                     <li>• <strong>Launch Calendar:</strong> Calendar view by Launch Date</li>
                   </ul>
                 </div>

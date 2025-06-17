@@ -27,6 +27,7 @@ import AirtableIntegration from '@/components/AirtableIntegration'
 import ContentManager from '@/components/ContentManager'
 import ContentCalendar from '@/components/ContentCalendar'
 import StrategyGuide from '@/components/StrategyGuide'
+import EmployeeManagement from '@/components/EmployeeManagement'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { useToast } from '@/components/ui/toast'
 
@@ -285,10 +286,16 @@ export default function Dashboard() {
     return () => clearInterval(autoSync)
   }, [allCreators, setLastSyncTime])
 
-  // Handle marking task as complete with proper phase alignment
+  // Handle marking task as complete with proper phase alignment and confirmation
   const handleMarkTaskComplete = (creatorId: number) => {
     const creator = allCreators.find(c => c.id === creatorId)
     if (!creator) return
+
+    // Show confirmation dialog
+    const confirmMessage = `Mark "${creator.nextTask}" as complete for ${creator.name}?`
+    if (!confirm(confirmMessage)) {
+      return
+    }
 
     const updatedCreators = allCreators.map(c => {
       if (c.id === creatorId) {
@@ -451,13 +458,14 @@ export default function Dashboard() {
 
         {/* Main Content */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-7">
+          <TabsList className="grid w-full grid-cols-8">
             <TabsTrigger value="pipeline">Creator Pipeline</TabsTrigger>
             <TabsTrigger value="creators">Creator Management</TabsTrigger>
             <TabsTrigger value="content">Content</TabsTrigger>
             <TabsTrigger value="calendar">Calendar</TabsTrigger>
             <TabsTrigger value="strategy">Strategy Guide</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
+            <TabsTrigger value="employees">Team</TabsTrigger>
             <TabsTrigger value="airtable">Airtable</TabsTrigger>
           </TabsList>
 
@@ -652,6 +660,13 @@ export default function Dashboard() {
 
           <TabsContent value="analytics">
             <Analytics creators={allCreators} content={allContent} />
+          </TabsContent>
+
+          <TabsContent value="employees">
+            <EmployeeManagement 
+              creators={allCreators} 
+              onCreatorsUpdate={setAllCreators}
+            />
           </TabsContent>
 
           <TabsContent value="airtable">

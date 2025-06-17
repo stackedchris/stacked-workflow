@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { isBrowser, safeLocalStorage } from '@/lib/utils'
 
 export function useLocalStorage<T>(key: string, initialValue: T) {
   // State to store our value
@@ -7,9 +8,9 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
 
   // Load from localStorage on mount (client-side only)
   useEffect(() => {
-    if (typeof window !== "undefined") {
+    if (isBrowser) {
       try {
-        const item = window.localStorage.getItem(key)
+        const item = safeLocalStorage.getItem(key)
         if (item) {
           const parsedValue = JSON.parse(item)
           setStoredValue(parsedValue)
@@ -29,8 +30,8 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
       // Save state
       setStoredValue(valueToStore)
       // Save to local storage
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(key, JSON.stringify(valueToStore))
+      if (isBrowser) {
+        safeLocalStorage.setItem(key, JSON.stringify(valueToStore))
         console.log(`Saved to localStorage [${key}]:`, valueToStore)
       }
     } catch (error) {

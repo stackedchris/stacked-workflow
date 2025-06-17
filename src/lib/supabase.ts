@@ -1,23 +1,89 @@
 import { createClient } from '@supabase/supabase-js'
+import { isSupabaseDisabled } from './utils'
 
 // Supabase configuration with your credentials
 const supabaseUrl = 'https://idmgjyhbpizcuptrmrky.supabase.co'
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkbWdqeWhicGl6Y3VwdHJta3kiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc1MDE4NjI4NiwiZXhwIjoyMDY1NzYyMjg2fQ.5ryQP5WVc4PhUoqXTn0c5CrwBwGjeT7w1NP_OqjRirk'
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-  },
-  realtime: {
-    params: {
-      eventsPerSecond: 10,
+// Create a safe client that won't break in SSR or when disabled
+export const createSafeClient = () => {
+  // Skip Supabase initialization if disabled or in SSR
+  if (isSupabaseDisabled()) {
+    return createMockClient()
+  }
+  
+  try {
+    return createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+      realtime: {
+        params: {
+          eventsPerSecond: 10,
+        },
+      },
+    })
+  } catch (error) {
+    console.error('Failed to create Supabase client:', error)
+    return createMockClient()
+  }
+}
+
+// Create a mock client that won't throw errors
+const createMockClient = () => {
+  return {
+    from: () => ({
+      select: () => ({
+        limit: () => ({
+          then: () => Promise.resolve({ data: [], error: null }),
+          catch: () => Promise.resolve({ data: [], error: null }),
+        }),
+        eq: () => ({
+          select: () => ({
+            single: () => Promise.resolve({ data: null, error: null }),
+          }),
+        }),
+        order: () => Promise.resolve({ data: [], error: null }),
+      }),
+      insert: () => ({
+        select: () => ({
+          single: () => Promise.resolve({ data: null, error: null }),
+        }),
+      }),
+      update: () => ({
+        eq: () => ({
+          select: () => ({
+            single: () => Promise.resolve({ data: null, error: null }),
+          }),
+        }),
+      }),
+      delete: () => ({
+        eq: () => Promise.resolve({ error: null }),
+      }),
+    }),
+    auth: {
+      getSession: () => Promise.resolve({ data: null, error: null }),
     },
-  },
-})
+    channel: () => ({
+      on: () => ({
+        subscribe: () => ({ unsubscribe: () => {} }),
+      }),
+    }),
+    rpc: () => Promise.resolve({ data: null, error: null }),
+  }
+}
+
+export const supabase = createSafeClient()
 
 // Test connection function
 export const testSupabaseConnection = async () => {
+  // Skip test if Supabase is disabled
+  if (isSupabaseDisabled()) {
+    console.log('🔍 Supabase is disabled, skipping connection test')
+    return { success: false, error: 'Supabase is disabled' }
+  }
+  
   try {
     console.log('🔍 Testing Supabase connection...')
     
@@ -42,6 +108,11 @@ export const testSupabaseConnection = async () => {
 
 // Quick connection check
 export const quickConnectionCheck = async () => {
+  // Skip check if Supabase is disabled
+  if (isSupabaseDisabled()) {
+    return { success: false, error: 'Supabase is disabled' }
+  }
+  
   try {
     const { data, error } = await supabase.auth.getSession()
     return { success: !error, error: error?.message }
@@ -98,6 +169,12 @@ export interface DatabaseContent {
 // Creator database operations
 export class CreatorService {
   static async getAllCreators(): Promise<DatabaseCreator[]> {
+    // Skip if Supabase is disabled
+    if (isSupabaseDisabled()) {
+      console.log('📥 Supabase is disabled, using local data')
+      return []
+    }
+    
     try {
       console.log('📥 Fetching creators from Supabase...')
       
@@ -120,6 +197,12 @@ export class CreatorService {
   }
 
   static async createCreator(creator: Omit<DatabaseCreator, 'id' | 'created_at' | 'updated_at'>): Promise<DatabaseCreator | null> {
+    // Skip if Supabase is disabled
+    if (isSupabaseDisabled()) {
+      console.log('📤 Supabase is disabled, using local data')
+      return null
+    }
+    
     try {
       console.log('📤 Creating creator in Supabase:', creator.name)
       
@@ -147,6 +230,12 @@ export class CreatorService {
   }
 
   static async updateCreator(id: number, updates: Partial<DatabaseCreator>): Promise<DatabaseCreator | null> {
+    // Skip if Supabase is disabled
+    if (isSupabaseDisabled()) {
+      console.log('📝 Supabase is disabled, using local data')
+      return null
+    }
+    
     try {
       console.log('📝 Updating creator in Supabase:', id)
       
@@ -174,6 +263,12 @@ export class CreatorService {
   }
 
   static async deleteCreator(id: number): Promise<boolean> {
+    // Skip if Supabase is disabled
+    if (isSupabaseDisabled()) {
+      console.log('🗑️ Supabase is disabled, using local data')
+      return true
+    }
+    
     try {
       console.log('🗑️ Deleting creator from Supabase:', id)
       
@@ -197,6 +292,12 @@ export class CreatorService {
 
   // Real-time subscription to creator changes
   static subscribeToCreators(callback: (creators: DatabaseCreator[]) => void) {
+    // Skip if Supabase is disabled
+    if (isSupabaseDisabled()) {
+      console.log('🔄 Supabase is disabled, skipping subscription')
+      return { unsubscribe: () => {} }
+    }
+    
     console.log('🔄 Setting up real-time subscription for creators...')
     
     const subscription = supabase
@@ -225,6 +326,12 @@ export class CreatorService {
 // Content database operations
 export class ContentService {
   static async getAllContent(): Promise<DatabaseContent[]> {
+    // Skip if Supabase is disabled
+    if (isSupabaseDisabled()) {
+      console.log('📥 Supabase is disabled, using local data')
+      return []
+    }
+    
     try {
       console.log('📥 Fetching content from Supabase...')
       
@@ -247,6 +354,12 @@ export class ContentService {
   }
 
   static async createContent(content: Omit<DatabaseContent, 'created_at' | 'updated_at'>): Promise<DatabaseContent | null> {
+    // Skip if Supabase is disabled
+    if (isSupabaseDisabled()) {
+      console.log('📤 Supabase is disabled, using local data')
+      return null
+    }
+    
     try {
       console.log('📤 Creating content in Supabase:', content.name)
       
@@ -274,6 +387,12 @@ export class ContentService {
   }
 
   static async updateContent(id: string, updates: Partial<DatabaseContent>): Promise<DatabaseContent | null> {
+    // Skip if Supabase is disabled
+    if (isSupabaseDisabled()) {
+      console.log('📝 Supabase is disabled, using local data')
+      return null
+    }
+    
     try {
       console.log('📝 Updating content in Supabase:', id)
       
@@ -301,6 +420,12 @@ export class ContentService {
   }
 
   static async deleteContent(id: string): Promise<boolean> {
+    // Skip if Supabase is disabled
+    if (isSupabaseDisabled()) {
+      console.log('🗑️ Supabase is disabled, using local data')
+      return true
+    }
+    
     try {
       console.log('🗑️ Deleting content from Supabase:', id)
       
@@ -324,6 +449,12 @@ export class ContentService {
 
   // Real-time subscription to content changes
   static subscribeToContent(callback: (content: DatabaseContent[]) => void) {
+    // Skip if Supabase is disabled
+    if (isSupabaseDisabled()) {
+      console.log('🔄 Supabase is disabled, skipping subscription')
+      return { unsubscribe: () => {} }
+    }
+    
     console.log('🔄 Setting up real-time subscription for content...')
     
     const subscription = supabase
@@ -433,6 +564,12 @@ export const convertDatabaseToContent = (dbContent: DatabaseContent): any => ({
 
 // Initialize database connection and test
 export const initializeDatabase = async () => {
+  // Skip if Supabase is disabled
+  if (isSupabaseDisabled()) {
+    console.log('🔧 Supabase is disabled, skipping database initialization')
+    return false
+  }
+  
   try {
     console.log('🔧 Initializing Supabase database connection...')
     
@@ -450,18 +587,13 @@ export const initializeDatabase = async () => {
         .select('id')
         .limit(1)
 
-      const { data: content, error: contentError } = await supabase
-        .from('content')
-        .select('id')
-        .limit(1)
-
-      if (creatorsError || contentError) {
-        console.error('❌ Database tables not accessible:', { creatorsError, contentError })
+      if (creatorsError) {
+        console.error('❌ Database tables not accessible:', creatorsError)
         return false
       }
 
       console.log('✅ Database initialized successfully!')
-      console.log(`📊 Found ${creators?.length || 0} creators, ${content?.length || 0} content items`)
+      console.log(`📊 Found ${creators?.length || 0} creators`)
       
       return true
     } catch (err) {

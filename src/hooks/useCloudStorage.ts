@@ -6,8 +6,7 @@ import {
   convertDatabaseToCreator,
   convertContentToDatabase,
   convertDatabaseToContent,
-  type DatabaseCreator,
-  type DatabaseContent
+  initializeDatabase
 } from '@/lib/supabase'
 import { useToast } from '@/components/ui/toast'
 
@@ -20,44 +19,112 @@ export function useCloudCreators() {
 
   // Load creators from cloud on mount
   useEffect(() => {
-    loadCreators()
-    
-    // Set up real-time subscription
-    const subscription = CreatorService.subscribeToCreators((updatedCreators) => {
-      const convertedCreators = updatedCreators.map(convertDatabaseToCreator)
-      setCreators(convertedCreators)
-      console.log('🔄 Real-time update: Creators synced from cloud')
-    })
-
-    return () => {
-      subscription.unsubscribe()
-    }
+    initializeAndLoadCreators()
   }, [])
+
+  const initializeAndLoadCreators = async () => {
+    try {
+      setIsLoading(true)
+      
+      // Initialize database first
+      const dbReady = await initializeDatabase()
+      if (!dbReady) {
+        console.log('⚠️ Database not ready, using local storage fallback')
+        loadFromLocalStorage()
+        setIsOnline(false)
+        return
+      }
+
+      // Load from cloud
+      await loadCreators()
+      
+      // Set up real-time subscription
+      const subscription = CreatorService.subscribeToCreators((updatedCreators) => {
+        const convertedCreators = updatedCreators.map(convertDatabaseToCreator)
+        setCreators(convertedCreators)
+        console.log('🔄 Real-time update: Creators synced from cloud')
+      })
+
+      return () => {
+        subscription.unsubscribe()
+      }
+    } catch (err) {
+      console.error('❌ Failed to initialize cloud storage:', err)
+      loadFromLocalStorage()
+      setIsOnline(false)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const loadFromLocalStorage = () => {
+    try {
+      const localData = localStorage.getItem('stacked-creators')
+      if (localData) {
+        const parsedData = JSON.parse(localData)
+        setCreators(parsedData)
+        console.log('📱 Loaded creators from localStorage:', parsedData.length)
+      } else {
+        // Use default demo data if no local data
+        const defaultCreators = [
+          {
+            id: 1,
+            name: "Kurama",
+            email: "kurama@example.com",
+            phone: "+1 (555) 123-4567",
+            category: "Gaming",
+            region: "US",
+            phase: "Phase 2: Launch Week",
+            phaseNumber: 2,
+            cardsSold: 67,
+            totalCards: 100,
+            cardPrice: 100,
+            daysInPhase: 2,
+            nextTask: "Post group chat screenshot",
+            salesVelocity: "High",
+            avatar: "🎮",
+            bio: "Top Smash Bros player with 500K+ following",
+            socialMedia: {
+              instagram: "@kurama_smash",
+              twitter: "@KuramaPlays",
+              youtube: "@KuramaGaming",
+              tiktok: "@kurama.gaming"
+            },
+            assets: { profileImages: [], videos: [], pressKit: [] },
+            strategy: {
+              launchDate: "2025-06-20",
+              targetAudience: "Competitive gaming fans",
+              contentPlan: "Daily gameplay tips"
+            },
+            stackedProfileUrl: "https://stacked.com/kurama",
+            createdAt: "2025-06-10",
+            lastUpdated: "2025-06-16"
+          }
+        ]
+        setCreators(defaultCreators)
+        localStorage.setItem('stacked-creators', JSON.stringify(defaultCreators))
+      }
+    } catch (err) {
+      console.error('Failed to load from localStorage:', err)
+      setCreators([])
+    }
+  }
 
   const loadCreators = async () => {
     try {
-      setIsLoading(true)
       const dbCreators = await CreatorService.getAllCreators()
       const convertedCreators = dbCreators.map(convertDatabaseToCreator)
       setCreators(convertedCreators)
       setIsOnline(true)
       console.log('✅ Loaded creators from cloud:', convertedCreators.length)
+      
+      // Backup to localStorage
+      localStorage.setItem('stacked-creators', JSON.stringify(convertedCreators))
     } catch (err) {
       console.error('❌ Failed to load creators from cloud:', err)
       setIsOnline(false)
       error('Failed to load creators from cloud. Using local data.')
-      
-      // Fallback to localStorage
-      try {
-        const localData = localStorage.getItem('stacked-creators')
-        if (localData) {
-          setCreators(JSON.parse(localData))
-        }
-      } catch (localErr) {
-        console.error('Failed to load local backup:', localErr)
-      }
-    } finally {
-      setIsLoading(false)
+      loadFromLocalStorage()
     }
   }
 
@@ -72,6 +139,11 @@ export function useCloudCreators() {
         setIsOnline(true)
         success('Creator added and synced to cloud')
         console.log('✅ Creator added to cloud:', convertedCreator.name)
+        
+        // Backup to localStorage
+        const updatedCreators = [...creators, convertedCreator]
+        localStorage.setItem('stacked-creators', JSON.stringify(updatedCreators))
+        
         return convertedCreator
       } else {
         throw new Error('Failed to create creator')
@@ -98,7 +170,13 @@ export function useCloudCreators() {
 
   const updateCreator = async (id: number, updates: any) => {
     try {
-      const dbUpdates = convertCreatorToDatabase({ ...updates, id })
+      const currentCreator = creators.find(c => c.id === id)
+      if (!currentCreator) {
+        throw new Error('Creator not found')
+      }
+
+      const mergedCreator = { ...currentCreator, ...updates }
+      const dbUpdates = convertCreatorToDatabase(mergedCreator)
       const updatedCreator = await CreatorService.updateCreator(id, dbUpdates)
       
       if (updatedCreator) {
@@ -107,6 +185,11 @@ export function useCloudCreators() {
         setIsOnline(true)
         success('Creator updated and synced to cloud')
         console.log('✅ Creator updated in cloud:', convertedCreator.name)
+        
+        // Backup to localStorage
+        const updatedCreators = creators.map(c => c.id === id ? convertedCreator : c)
+        localStorage.setItem('stacked-creators', JSON.stringify(updatedCreators))
+        
         return convertedCreator
       } else {
         throw new Error('Failed to update creator')
@@ -137,6 +220,10 @@ export function useCloudCreators() {
         setCreators(prev => prev.filter(c => c.id !== id))
         setIsOnline(true)
         console.log('✅ Creator deleted from cloud:', id)
+        
+        // Backup to localStorage
+        const updatedCreators = creators.filter(c => c.id !== id)
+        localStorage.setItem('stacked-creators', JSON.stringify(updatedCreators))
       } else {
         throw new Error('Failed to delete creator')
       }
@@ -178,44 +265,75 @@ export function useCloudContent() {
 
   // Load content from cloud on mount
   useEffect(() => {
-    loadContent()
-    
-    // Set up real-time subscription
-    const subscription = ContentService.subscribeToContent((updatedContent) => {
-      const convertedContent = updatedContent.map(convertDatabaseToContent)
-      setContent(convertedContent)
-      console.log('🔄 Real-time update: Content synced from cloud')
-    })
-
-    return () => {
-      subscription.unsubscribe()
-    }
+    initializeAndLoadContent()
   }, [])
+
+  const initializeAndLoadContent = async () => {
+    try {
+      setIsLoading(true)
+      
+      // Initialize database first
+      const dbReady = await initializeDatabase()
+      if (!dbReady) {
+        console.log('⚠️ Database not ready, using local storage fallback')
+        loadFromLocalStorage()
+        setIsOnline(false)
+        return
+      }
+
+      // Load from cloud
+      await loadContent()
+      
+      // Set up real-time subscription
+      const subscription = ContentService.subscribeToContent((updatedContent) => {
+        const convertedContent = updatedContent.map(convertDatabaseToContent)
+        setContent(convertedContent)
+        console.log('🔄 Real-time update: Content synced from cloud')
+      })
+
+      return () => {
+        subscription.unsubscribe()
+      }
+    } catch (err) {
+      console.error('❌ Failed to initialize content cloud storage:', err)
+      loadFromLocalStorage()
+      setIsOnline(false)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const loadFromLocalStorage = () => {
+    try {
+      const localData = localStorage.getItem('stacked-content')
+      if (localData) {
+        const parsedData = JSON.parse(localData)
+        setContent(parsedData)
+        console.log('📱 Loaded content from localStorage:', parsedData.length)
+      } else {
+        setContent([])
+      }
+    } catch (err) {
+      console.error('Failed to load content from localStorage:', err)
+      setContent([])
+    }
+  }
 
   const loadContent = async () => {
     try {
-      setIsLoading(true)
       const dbContent = await ContentService.getAllContent()
       const convertedContent = dbContent.map(convertDatabaseToContent)
       setContent(convertedContent)
       setIsOnline(true)
       console.log('✅ Loaded content from cloud:', convertedContent.length)
+      
+      // Backup to localStorage
+      localStorage.setItem('stacked-content', JSON.stringify(convertedContent))
     } catch (err) {
       console.error('❌ Failed to load content from cloud:', err)
       setIsOnline(false)
       error('Failed to load content from cloud. Using local data.')
-      
-      // Fallback to localStorage
-      try {
-        const localData = localStorage.getItem('stacked-content')
-        if (localData) {
-          setContent(JSON.parse(localData))
-        }
-      } catch (localErr) {
-        console.error('Failed to load local backup:', localErr)
-      }
-    } finally {
-      setIsLoading(false)
+      loadFromLocalStorage()
     }
   }
 
@@ -230,6 +348,11 @@ export function useCloudContent() {
         setIsOnline(true)
         success('Content added and synced to cloud')
         console.log('✅ Content added to cloud:', convertedContent.name)
+        
+        // Backup to localStorage
+        const updatedContent = [...content, convertedContent]
+        localStorage.setItem('stacked-content', JSON.stringify(updatedContent))
+        
         return convertedContent
       } else {
         throw new Error('Failed to create content')
@@ -255,7 +378,13 @@ export function useCloudContent() {
 
   const updateContent = async (id: string, updates: any) => {
     try {
-      const dbUpdates = convertContentToDatabase({ ...updates, id })
+      const currentContent = content.find(c => c.id === id)
+      if (!currentContent) {
+        throw new Error('Content not found')
+      }
+
+      const mergedContent = { ...currentContent, ...updates }
+      const dbUpdates = convertContentToDatabase(mergedContent)
       const updatedContent = await ContentService.updateContent(id, dbUpdates)
       
       if (updatedContent) {
@@ -264,6 +393,11 @@ export function useCloudContent() {
         setIsOnline(true)
         success('Content updated and synced to cloud')
         console.log('✅ Content updated in cloud:', convertedContent.name)
+        
+        // Backup to localStorage
+        const updatedContentList = content.map(c => c.id === id ? convertedContent : c)
+        localStorage.setItem('stacked-content', JSON.stringify(updatedContentList))
+        
         return convertedContent
       } else {
         throw new Error('Failed to update content')
@@ -294,6 +428,10 @@ export function useCloudContent() {
         setContent(prev => prev.filter(c => c.id !== id))
         setIsOnline(true)
         console.log('✅ Content deleted from cloud:', id)
+        
+        // Backup to localStorage
+        const updatedContent = content.filter(c => c.id !== id)
+        localStorage.setItem('stacked-content', JSON.stringify(updatedContent))
       } else {
         throw new Error('Failed to delete content')
       }

@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 
 // Supabase configuration
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://your-project.supabase.co'
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'your-anon-key'
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://idmgjyhbpizcuptrmrky.supabase.co'
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkbWdqeWhicGl6Y3VwdHJta3kiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc1MDE4NjI4NiwiZXhwIjoyMDY1NzYyMjg2fQ.5ryQP5WVc4PhUoqXTn0c5CrwBwGjeT7w1NP_OqjRirk'
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
@@ -54,69 +54,89 @@ export interface DatabaseContent {
 // Creator database operations
 export class CreatorService {
   static async getAllCreators(): Promise<DatabaseCreator[]> {
-    const { data, error } = await supabase
-      .from('creators')
-      .select('*')
-      .order('created_at', { ascending: false })
+    try {
+      const { data, error } = await supabase
+        .from('creators')
+        .select('*')
+        .order('created_at', { ascending: false })
 
-    if (error) {
-      console.error('Error fetching creators:', error)
+      if (error) {
+        console.error('Error fetching creators:', error)
+        return []
+      }
+
+      return data || []
+    } catch (error) {
+      console.error('Network error fetching creators:', error)
       return []
     }
-
-    return data || []
   }
 
   static async createCreator(creator: Omit<DatabaseCreator, 'id' | 'created_at' | 'updated_at'>): Promise<DatabaseCreator | null> {
-    const { data, error } = await supabase
-      .from('creators')
-      .insert([{
-        ...creator,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }])
-      .select()
-      .single()
+    try {
+      const { data, error } = await supabase
+        .from('creators')
+        .insert([{
+          ...creator,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }])
+        .select()
+        .single()
 
-    if (error) {
-      console.error('Error creating creator:', error)
+      if (error) {
+        console.error('Error creating creator:', error)
+        return null
+      }
+
+      return data
+    } catch (error) {
+      console.error('Network error creating creator:', error)
       return null
     }
-
-    return data
   }
 
   static async updateCreator(id: number, updates: Partial<DatabaseCreator>): Promise<DatabaseCreator | null> {
-    const { data, error } = await supabase
-      .from('creators')
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', id)
-      .select()
-      .single()
+    try {
+      const { data, error } = await supabase
+        .from('creators')
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id)
+        .select()
+        .single()
 
-    if (error) {
-      console.error('Error updating creator:', error)
+      if (error) {
+        console.error('Error updating creator:', error)
+        return null
+      }
+
+      return data
+    } catch (error) {
+      console.error('Network error updating creator:', error)
       return null
     }
-
-    return data
   }
 
   static async deleteCreator(id: number): Promise<boolean> {
-    const { error } = await supabase
-      .from('creators')
-      .delete()
-      .eq('id', id)
+    try {
+      const { error } = await supabase
+        .from('creators')
+        .delete()
+        .eq('id', id)
 
-    if (error) {
-      console.error('Error deleting creator:', error)
+      if (error) {
+        console.error('Error deleting creator:', error)
+        return false
+      }
+
+      return true
+    } catch (error) {
+      console.error('Network error deleting creator:', error)
       return false
     }
-
-    return true
   }
 
   // Real-time subscription to creator changes
@@ -140,69 +160,89 @@ export class CreatorService {
 // Content database operations
 export class ContentService {
   static async getAllContent(): Promise<DatabaseContent[]> {
-    const { data, error } = await supabase
-      .from('content')
-      .select('*')
-      .order('created_at', { ascending: false })
+    try {
+      const { data, error } = await supabase
+        .from('content')
+        .select('*')
+        .order('created_at', { ascending: false })
 
-    if (error) {
-      console.error('Error fetching content:', error)
+      if (error) {
+        console.error('Error fetching content:', error)
+        return []
+      }
+
+      return data || []
+    } catch (error) {
+      console.error('Network error fetching content:', error)
       return []
     }
-
-    return data || []
   }
 
   static async createContent(content: Omit<DatabaseContent, 'created_at' | 'updated_at'>): Promise<DatabaseContent | null> {
-    const { data, error } = await supabase
-      .from('content')
-      .insert([{
-        ...content,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }])
-      .select()
-      .single()
+    try {
+      const { data, error } = await supabase
+        .from('content')
+        .insert([{
+          ...content,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }])
+        .select()
+        .single()
 
-    if (error) {
-      console.error('Error creating content:', error)
+      if (error) {
+        console.error('Error creating content:', error)
+        return null
+      }
+
+      return data
+    } catch (error) {
+      console.error('Network error creating content:', error)
       return null
     }
-
-    return data
   }
 
   static async updateContent(id: string, updates: Partial<DatabaseContent>): Promise<DatabaseContent | null> {
-    const { data, error } = await supabase
-      .from('content')
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', id)
-      .select()
-      .single()
+    try {
+      const { data, error } = await supabase
+        .from('content')
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id)
+        .select()
+        .single()
 
-    if (error) {
-      console.error('Error updating content:', error)
+      if (error) {
+        console.error('Error updating content:', error)
+        return null
+      }
+
+      return data
+    } catch (error) {
+      console.error('Network error updating content:', error)
       return null
     }
-
-    return data
   }
 
   static async deleteContent(id: string): Promise<boolean> {
-    const { error } = await supabase
-      .from('content')
-      .delete()
-      .eq('id', id)
+    try {
+      const { error } = await supabase
+        .from('content')
+        .delete()
+        .eq('id', id)
 
-    if (error) {
-      console.error('Error deleting content:', error)
+      if (error) {
+        console.error('Error deleting content:', error)
+        return false
+      }
+
+      return true
+    } catch (error) {
+      console.error('Network error deleting content:', error)
       return false
     }
-
-    return true
   }
 
   // Real-time subscription to content changes
@@ -229,7 +269,7 @@ export const convertCreatorToDatabase = (creator: any): Omit<DatabaseCreator, 'i
   email: creator.email || '',
   phone: creator.phone || '',
   category: creator.category,
-  region: creator.region,
+  region: creator.region || 'US',
   phase: creator.phase,
   phase_number: creator.phaseNumber,
   cards_sold: creator.cardsSold,
@@ -240,9 +280,9 @@ export const convertCreatorToDatabase = (creator: any): Omit<DatabaseCreator, 'i
   sales_velocity: creator.salesVelocity,
   avatar: creator.avatar,
   bio: creator.bio || '',
-  social_media: creator.socialMedia,
-  assets: creator.assets,
-  strategy: creator.strategy,
+  social_media: creator.socialMedia || {},
+  assets: creator.assets || { profileImages: [], videos: [], pressKit: [] },
+  strategy: creator.strategy || {},
   stacked_profile_url: creator.stackedProfileUrl || ''
 })
 
@@ -304,3 +344,29 @@ export const convertDatabaseToContent = (dbContent: DatabaseContent): any => ({
   uploadDate: dbContent.upload_date,
   size: dbContent.size
 })
+
+// Initialize database tables if they don't exist
+export const initializeDatabase = async () => {
+  try {
+    // Check if tables exist by trying to query them
+    const { error: creatorsError } = await supabase
+      .from('creators')
+      .select('id')
+      .limit(1)
+
+    const { error: contentError } = await supabase
+      .from('content')
+      .select('id')
+      .limit(1)
+
+    if (creatorsError || contentError) {
+      console.log('Database tables need to be created. Please set up your Supabase database.')
+      return false
+    }
+
+    return true
+  } catch (error) {
+    console.error('Database initialization check failed:', error)
+    return false
+  }
+}

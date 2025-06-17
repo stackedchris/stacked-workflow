@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -19,7 +20,10 @@ import {
   User,
   Image,
   Video,
-  FileText
+  FileText,
+  Save,
+  X,
+  Trash2
 } from 'lucide-react'
 
 interface ContentItem {
@@ -155,6 +159,8 @@ export default function ContentCalendar({
   const [filterCreator, setFilterCreator] = useState('all')
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterType, setFilterType] = useState('all')
+  const [editingContent, setEditingContent] = useState<ContentItem | null>(null)
+  const [draggedContent, setDraggedContent] = useState<ContentItem | null>(null)
 
   // Filter content based on current filters
   const filteredContent = useMemo(() => {
@@ -214,6 +220,68 @@ export default function ContentCalendar({
   const navigateToToday = () => {
     setCurrentDate(new Date())
     setSelectedDate(new Date())
+  }
+
+  const handleDragStart = (e: React.DragEvent, item: ContentItem) => {
+    setDraggedContent(item)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  const handleDrop = (e: React.DragEvent, targetDate: Date) => {
+    e.preventDefault()
+    
+    if (!draggedContent || !onContentUpdate) return
+
+    // Update the content's scheduled date
+    const updatedContent = content.map(item => {
+      if (item.id === draggedContent.id) {
+        const newScheduledDate = new Date(targetDate)
+        // Keep the original time if it exists
+        if (item.scheduledDate) {
+          const originalTime = new Date(item.scheduledDate)
+          newScheduledDate.setHours(originalTime.getHours(), originalTime.getMinutes())
+        } else {
+          newScheduledDate.setHours(12, 0) // Default to noon
+        }
+        
+        return {
+          ...item,
+          scheduledDate: newScheduledDate.toISOString(),
+          status: 'scheduled' as const
+        }
+      }
+      return item
+    })
+
+    onContentUpdate(updatedContent)
+    setDraggedContent(null)
+  }
+
+  const handleEditContent = (item: ContentItem) => {
+    setEditingContent(item)
+  }
+
+  const handleSaveEdit = () => {
+    if (!editingContent || !onContentUpdate) return
+
+    const updatedContent = content.map(item =>
+      item.id === editingContent.id ? editingContent : item
+    )
+
+    onContentUpdate(updatedContent)
+    setEditingContent(null)
+  }
+
+  const handleDeleteContent = (contentId: string) => {
+    if (!onContentUpdate) return
+
+    const updatedContent = content.filter(item => item.id !== contentId)
+    onContentUpdate(updatedContent)
   }
 
   const getTypeIcon = (type: string) => {
@@ -367,6 +435,8 @@ export default function ContentCalendar({
                         hover:bg-gray-50
                       `}
                       onClick={() => setSelectedDate(date)}
+                      onDragOver={handleDragOver}
+                      onDrop={(e) => handleDrop(e, date)}
                     >
                       <div className={`text-sm font-medium mb-1 ${
                         isCurrentMonth(date) ? 'text-gray-900' : 'text-gray-400'
@@ -379,11 +449,13 @@ export default function ContentCalendar({
                           <div
                             key={item.id}
                             className={`
-                              text-xs p-1 rounded border-l-2 truncate
+                              text-xs p-1 rounded border-l-2 truncate cursor-move
                               ${getStatusColor(item.status)}
                               ${getPriorityColor(item.priority)}
                             `}
                             title={`${item.name} - ${item.creatorName}`}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, item)}
                           >
                             <div className="flex items-center space-x-1">
                               {getTypeIcon(item.type)}
@@ -472,7 +544,12 @@ export default function ContentCalendar({
                             <Eye className="w-3 h-3 mr-1" />
                             View
                           </Button>
-                          <Button size="sm" variant="outline" className="flex-1">
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            className="flex-1"
+                            onClick={() => handleEditContent(item)}
+                          >
                             <Edit className="w-3 h-3 mr-1" />
                             Edit
                           </Button>
@@ -551,6 +628,112 @@ export default function ContentCalendar({
           </CardContent>
         </Card>
       </div>
+
+      {/* Edit Content Modal */}
+      {editingContent && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Edit Content</CardTitle>
+                <Button variant="outline" size="sm" onClick={() => setEditingContent(null)}>
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Content Name</label>
+                <Input
+                  value={editingContent.name}
+                  onChange={(e) => setEditingContent({ ...editingContent, name: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Description</label>
+                <Textarea
+                  value={editingContent.description}
+                  onChange={(e) => setEditingContent({ ...editingContent, description: e.target.value })}
+                  rows={3}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">Status</label>
+                  <Select
+                    value={editingContent.status}
+                    onValueChange={(value: 'draft' | 'scheduled' | 'posted') =>
+                      setEditingContent({ ...editingContent, status: value })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="draft">Draft</SelectItem>
+                      <SelectItem value="scheduled">Scheduled</SelectItem>
+                      <SelectItem value="posted">Posted</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Priority</label>
+                  <Select
+                    value={editingContent.priority || 'medium'}
+                    onValueChange={(value: 'low' | 'medium' | 'high') =>
+                      setEditingContent({ ...editingContent, priority: value })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Scheduled Date & Time</label>
+                <Input
+                  type="datetime-local"
+                  value={editingContent.scheduledDate ? 
+                    new Date(editingContent.scheduledDate).toISOString().slice(0, 16) : ''
+                  }
+                  onChange={(e) => setEditingContent({ 
+                    ...editingContent, 
+                    scheduledDate: e.target.value ? new Date(e.target.value).toISOString() : undefined 
+                  })}
+                />
+              </div>
+
+              <div className="flex space-x-3 pt-4">
+                <Button onClick={handleSaveEdit} className="flex-1">
+                  <Save className="w-4 h-4 mr-2" />
+                  Save Changes
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => handleDeleteContent(editingContent.id)}
+                  className="text-red-600 hover:text-red-700"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete
+                </Button>
+                <Button variant="outline" onClick={() => setEditingContent(null)}>
+                  Cancel
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   )
 }

@@ -25,8 +25,9 @@ import {
   Plus,
   Edit,
   Save,
+  X,
   Trash2,
-  FileText
+  Link
 } from 'lucide-react'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 
@@ -40,22 +41,21 @@ interface Creator {
   totalCards: number
   cardPrice: number
   salesVelocity: string
-  region: string
 }
 
 interface CustomStrategy {
   id: string
-  creatorId: number
-  creatorName: string
   title: string
   description: string
   content: string
-  phase: number
+  phase: number[]
+  category: string[]
   priority: 'high' | 'medium' | 'low'
-  status: 'draft' | 'active' | 'completed'
   createdAt: string
-  updatedAt: string
-  tags: string[]
+  lastUsed?: string
+  useCount: number
+  linkedCreators: number[]
+  tasks: string[]
 }
 
 interface StrategyGuideProps {
@@ -121,20 +121,28 @@ const strategySteps = [
   }
 ]
 
+const nextStepsTemplate = {
+  pricingFinalization: "Will there be an intro price drop? How long will it last?",
+  ctaAlignment: "Choose which messages to use in each Reel",
+  reelScheduling: "Aim for 3–5 short Reels over the next week",
+  adBoosting: "Send us ad code access so we can promote your Reels directly"
+}
+
 export default function StrategyGuide({ creators = [] }: StrategyGuideProps) {
   const [selectedCreator, setSelectedCreator] = useState<Creator | null>(null)
   const [activeStep, setActiveStep] = useState(1)
-  const [customStrategies, setCustomStrategies, isStrategiesHydrated] = useLocalStorage<CustomStrategy[]>('stacked-custom-strategies', [])
+  const [customStrategies, setCustomStrategies] = useLocalStorage<CustomStrategy[]>('stacked-custom-strategies', [])
+  const [creatorStrategies, setCreatorStrategies] = useLocalStorage<Record<number, string[]>>('stacked-creator-strategies', {})
   const [isCreatingStrategy, setIsCreatingStrategy] = useState(false)
-  const [editingStrategy, setEditingStrategy] = useState<string | null>(null)
+  const [editingStrategy, setEditingStrategy] = useState<CustomStrategy | null>(null)
   const [newStrategy, setNewStrategy] = useState<Partial<CustomStrategy>>({
     title: '',
     description: '',
     content: '',
-    phase: 1,
+    phase: [],
+    category: [],
     priority: 'medium',
-    status: 'draft',
-    tags: []
+    tasks: []
   })
 
   // Filter creators by phase for strategy recommendations
@@ -152,9 +160,101 @@ export default function StrategyGuide({ creators = [] }: StrategyGuideProps) {
     return strategySteps.filter(step => step.phase.includes(phaseNumber))
   }
 
+  const getCustomStrategiesForCreator = (creator: Creator) => {
+    const linkedStrategies = customStrategies.filter(strategy => 
+      strategy.linkedCreators.includes(creator.id) ||
+      strategy.phase.includes(creator.phaseNumber) ||
+      strategy.category.includes(creator.category)
+    )
+    return linkedStrategies
+  }
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
-    alert('✅ Copied to clipboard!')
+    // No popup - just silent copy
+  }
+
+  const handleCreateStrategy = () => {
+    if (!newStrategy.title || !newStrategy.content) return
+
+    const strategy: CustomStrategy = {
+      id: `custom-${Date.now()}`,
+      title: newStrategy.title || '',
+      description: newStrategy.description || '',
+      content: newStrategy.content || '',
+      phase: newStrategy.phase || [],
+      category: newStrategy.category || [],
+      priority: newStrategy.priority || 'medium',
+      createdAt: new Date().toISOString(),
+      useCount: 0,
+      linkedCreators: newStrategy.linkedCreators || [],
+      tasks: newStrategy.tasks || []
+    }
+
+    setCustomStrategies([...customStrategies, strategy])
+    setNewStrategy({
+      title: '',
+      description: '',
+      content: '',
+      phase: [],
+      category: [],
+      priority: 'medium',
+      tasks: []
+    })
+    setIsCreatingStrategy(false)
+  }
+
+  const handleEditStrategy = (strategy: CustomStrategy) => {
+    setEditingStrategy(strategy)
+    setNewStrategy(strategy)
+    setIsCreatingStrategy(true)
+  }
+
+  const handleSaveEdit = () => {
+    if (!editingStrategy || !newStrategy.title || !newStrategy.content) return
+
+    const updatedStrategies = customStrategies.map(s =>
+      s.id === editingStrategy.id ? { ...editingStrategy, ...newStrategy } : s
+    )
+    setCustomStrategies(updatedStrategies)
+    setEditingStrategy(null)
+    setIsCreatingStrategy(false)
+    setNewStrategy({
+      title: '',
+      description: '',
+      content: '',
+      phase: [],
+      category: [],
+      priority: 'medium',
+      tasks: []
+    })
+  }
+
+  const handleDeleteStrategy = (strategyId: string) => {
+    setCustomStrategies(customStrategies.filter(s => s.id !== strategyId))
+  }
+
+  const handleLinkStrategyToCreator = (strategyId: string, creatorId: number) => {
+    const updatedStrategies = customStrategies.map(strategy => {
+      if (strategy.id === strategyId) {
+        const linkedCreators = strategy.linkedCreators.includes(creatorId)
+          ? strategy.linkedCreators.filter(id => id !== creatorId)
+          : [...strategy.linkedCreators, creatorId]
+        return { ...strategy, linkedCreators }
+      }
+      return strategy
+    })
+    setCustomStrategies(updatedStrategies)
+  }
+
+  const handleUseStrategy = (strategy: CustomStrategy) => {
+    const updatedStrategies = customStrategies.map(s =>
+      s.id === strategy.id 
+        ? { ...s, useCount: s.useCount + 1, lastUsed: new Date().toISOString() }
+        : s
+    )
+    setCustomStrategies(updatedStrategies)
+    copyToClipboard(strategy.content)
   }
 
   const getPhaseColor = (phaseNumber: number) => {
@@ -170,93 +270,11 @@ export default function StrategyGuide({ creators = [] }: StrategyGuideProps) {
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case 'high': return 'bg-red-100 text-red-800 border-red-200'
-      case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200'
-      case 'low': return 'bg-blue-100 text-blue-800 border-blue-200'
-      default: return 'bg-gray-100 text-gray-800 border-gray-200'
+      case 'high': return 'bg-red-100 text-red-800'
+      case 'medium': return 'bg-yellow-100 text-yellow-800'
+      case 'low': return 'bg-blue-100 text-blue-800'
+      default: return 'bg-gray-100 text-gray-800'
     }
-  }
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active': return 'bg-green-100 text-green-800 border-green-200'
-      case 'completed': return 'bg-purple-100 text-purple-800 border-purple-200'
-      case 'draft': return 'bg-gray-100 text-gray-800 border-gray-200'
-      default: return 'bg-gray-100 text-gray-800 border-gray-200'
-    }
-  }
-
-  const handleCreateStrategy = () => {
-    if (!selectedCreator || !newStrategy.title || !newStrategy.content) {
-      alert('Please select a creator and fill in the title and content.')
-      return
-    }
-
-    const strategy: CustomStrategy = {
-      id: `strategy-${Date.now()}`,
-      creatorId: selectedCreator.id,
-      creatorName: selectedCreator.name,
-      title: newStrategy.title || '',
-      description: newStrategy.description || '',
-      content: newStrategy.content || '',
-      phase: newStrategy.phase || selectedCreator.phaseNumber,
-      priority: newStrategy.priority || 'medium',
-      status: newStrategy.status || 'draft',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      tags: newStrategy.tags || []
-    }
-
-    setCustomStrategies([...customStrategies, strategy])
-    setNewStrategy({
-      title: '',
-      description: '',
-      content: '',
-      phase: selectedCreator.phaseNumber,
-      priority: 'medium',
-      status: 'draft',
-      tags: []
-    })
-    setIsCreatingStrategy(false)
-    alert(`✅ Custom strategy created for ${selectedCreator.name}!`)
-  }
-
-  const handleUpdateStrategy = (strategyId: string, updates: Partial<CustomStrategy>) => {
-    const updatedStrategies = customStrategies.map(strategy =>
-      strategy.id === strategyId
-        ? { ...strategy, ...updates, updatedAt: new Date().toISOString() }
-        : strategy
-    )
-    setCustomStrategies(updatedStrategies)
-    setEditingStrategy(null)
-  }
-
-  const handleDeleteStrategy = (strategyId: string) => {
-    if (confirm('Are you sure you want to delete this custom strategy?')) {
-      const updatedStrategies = customStrategies.filter(strategy => strategy.id !== strategyId)
-      setCustomStrategies(updatedStrategies)
-      alert('✅ Strategy deleted successfully!')
-    }
-  }
-
-  const getCreatorCustomStrategies = (creatorId: number) => {
-    return customStrategies.filter(strategy => strategy.creatorId === creatorId)
-  }
-
-  const addTagToNewStrategy = (tag: string) => {
-    if (tag.trim() && !newStrategy.tags?.includes(tag.trim())) {
-      setNewStrategy({
-        ...newStrategy,
-        tags: [...(newStrategy.tags || []), tag.trim()]
-      })
-    }
-  }
-
-  const removeTagFromNewStrategy = (tagToRemove: string) => {
-    setNewStrategy({
-      ...newStrategy,
-      tags: newStrategy.tags?.filter(tag => tag !== tagToRemove) || []
-    })
   }
 
   return (
@@ -266,10 +284,16 @@ export default function StrategyGuide({ creators = [] }: StrategyGuideProps) {
           <h2 className="text-2xl font-bold">Top 100 Launch Strategy Guide</h2>
           <p className="text-gray-600">Internal strategy templates and creator-specific recommendations</p>
         </div>
-        <Badge className="bg-blue-100 text-blue-800">
-          <Award className="w-4 h-4 mr-1" />
-          Internal Resource
-        </Badge>
+        <div className="flex space-x-2">
+          <Button onClick={() => setIsCreatingStrategy(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Create Custom Strategy
+          </Button>
+          <Badge className="bg-blue-100 text-blue-800">
+            <Award className="w-4 h-4 mr-1" />
+            Internal Resource
+          </Badge>
+        </div>
       </div>
 
       <Tabs defaultValue="overview" className="space-y-6">
@@ -412,12 +436,7 @@ export default function StrategyGuide({ creators = [] }: StrategyGuideProps) {
                       <div className="flex items-center justify-between">
                         <div>
                           <h4 className="font-medium">{creator.name}</h4>
-                          <div className="flex items-center space-x-2">
-                            <p className="text-sm text-gray-600">{creator.category}</p>
-                            <Badge variant="outline" className="text-xs">
-                              {creator.region}
-                            </Badge>
-                          </div>
+                          <p className="text-sm text-gray-600">{creator.category}</p>
                         </div>
                         <Badge className={getPhaseColor(creator.phaseNumber)}>
                           Phase {creator.phaseNumber}
@@ -494,21 +513,10 @@ export default function StrategyGuide({ creators = [] }: StrategyGuideProps) {
                         </div>
                       </div>
 
-                      {/* Custom Strategies for this Creator */}
                       <div>
-                        <div className="flex items-center justify-between mb-3">
-                          <h4 className="font-semibold">Custom Strategies for {selectedCreator.name}:</h4>
-                          <Button
-                            size="sm"
-                            onClick={() => setIsCreatingStrategy(true)}
-                          >
-                            <Plus className="w-3 h-3 mr-1" />
-                            Add Custom Strategy
-                          </Button>
-                        </div>
-                        
+                        <h4 className="font-semibold mb-3">Custom Strategies for {selectedCreator.name}:</h4>
                         <div className="space-y-3">
-                          {getCreatorCustomStrategies(selectedCreator.id).map((strategy) => (
+                          {getCustomStrategiesForCreator(selectedCreator).map((strategy) => (
                             <div key={strategy.id} className="border rounded-lg p-4">
                               <div className="flex items-center justify-between mb-2">
                                 <h5 className="font-medium">{strategy.title}</h5>
@@ -516,64 +524,48 @@ export default function StrategyGuide({ creators = [] }: StrategyGuideProps) {
                                   <Badge className={getPriorityColor(strategy.priority)}>
                                     {strategy.priority}
                                   </Badge>
-                                  <Badge className={getStatusColor(strategy.status)}>
-                                    {strategy.status}
-                                  </Badge>
                                   <Button
                                     size="sm"
-                                    variant="ghost"
-                                    onClick={() => setEditingStrategy(strategy.id)}
+                                    variant="outline"
+                                    onClick={() => handleLinkStrategyToCreator(strategy.id, selectedCreator.id)}
                                   >
-                                    <Edit className="w-3 h-3" />
+                                    <Link className="w-3 h-3 mr-1" />
+                                    {strategy.linkedCreators.includes(selectedCreator.id) ? 'Unlink' : 'Link'}
                                   </Button>
                                 </div>
                               </div>
-                              <p className="text-sm text-gray-600 mb-2">{strategy.description}</p>
-                              <div className="bg-gray-50 p-3 rounded mb-2">
+                              <p className="text-sm text-gray-600 mb-3">{strategy.description}</p>
+                              <div className="bg-gray-50 p-3 rounded">
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-xs font-medium">Strategy Content:</span>
+                                  <Button size="sm" variant="ghost" onClick={() => handleUseStrategy(strategy)}>
+                                    <Copy className="w-3 h-3" />
+                                  </Button>
+                                </div>
                                 <p className="text-sm">{strategy.content}</p>
                               </div>
-                              {strategy.tags.length > 0 && (
-                                <div className="flex flex-wrap gap-1">
-                                  {strategy.tags.map((tag) => (
-                                    <Badge key={tag} variant="secondary" className="text-xs">
-                                      #{tag}
-                                    </Badge>
-                                  ))}
+                              {strategy.tasks.length > 0 && (
+                                <div className="mt-3">
+                                  <span className="text-xs font-medium">Tasks:</span>
+                                  <ul className="text-sm text-gray-600 mt-1">
+                                    {strategy.tasks.map((task, index) => (
+                                      <li key={index} className="flex items-center">
+                                        <CheckCircle2 className="w-3 h-3 text-green-500 mr-1" />
+                                        {task}
+                                      </li>
+                                    ))}
+                                  </ul>
                                 </div>
                               )}
-                              <div className="flex space-x-2 mt-2">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => copyToClipboard(strategy.content)}
-                                >
-                                  <Copy className="w-3 h-3 mr-1" />
-                                  Copy
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleDeleteStrategy(strategy.id)}
-                                  className="text-red-600 hover:text-red-700"
-                                >
-                                  <Trash2 className="w-3 h-3 mr-1" />
-                                  Delete
-                                </Button>
-                              </div>
                             </div>
                           ))}
-                          
-                          {getCreatorCustomStrategies(selectedCreator.id).length === 0 && (
+                          {getCustomStrategiesForCreator(selectedCreator).length === 0 && (
                             <div className="text-center py-8 text-gray-500">
-                              <FileText className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                              <p className="text-sm">No custom strategies yet</p>
-                              <Button
-                                size="sm"
-                                className="mt-2"
-                                onClick={() => setIsCreatingStrategy(true)}
-                              >
+                              <Target className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                              <p className="text-sm">No custom strategies for this creator yet</p>
+                              <Button size="sm" className="mt-2" onClick={() => setIsCreatingStrategy(true)}>
                                 <Plus className="w-3 h-3 mr-1" />
-                                Create First Strategy
+                                Create Custom Strategy
                               </Button>
                             </div>
                           )}
@@ -598,8 +590,8 @@ export default function StrategyGuide({ creators = [] }: StrategyGuideProps) {
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-xl font-semibold">Custom Strategies</h3>
-                <p className="text-gray-600">Create and manage personalized strategies for each creator</p>
+                <h3 className="text-xl font-semibold">Custom Strategies ({customStrategies.length})</h3>
+                <p className="text-gray-600">Create and manage your own strategy templates</p>
               </div>
               <Button onClick={() => setIsCreatingStrategy(true)}>
                 <Plus className="w-4 h-4 mr-2" />
@@ -607,170 +599,69 @@ export default function StrategyGuide({ creators = [] }: StrategyGuideProps) {
               </Button>
             </div>
 
-            {/* Custom Strategies List */}
-            <div className="grid gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {customStrategies.map((strategy) => (
                 <Card key={strategy.id}>
-                  <CardContent className="p-6">
-                    {editingStrategy === strategy.id ? (
-                      <div className="space-y-4">
-                        <Input
-                          value={strategy.title}
-                          onChange={(e) => handleUpdateStrategy(strategy.id, { title: e.target.value })}
-                          placeholder="Strategy title"
-                          className="font-medium"
-                        />
-                        <Input
-                          value={strategy.description}
-                          onChange={(e) => handleUpdateStrategy(strategy.id, { description: e.target.value })}
-                          placeholder="Brief description"
-                        />
-                        <Textarea
-                          value={strategy.content}
-                          onChange={(e) => handleUpdateStrategy(strategy.id, { content: e.target.value })}
-                          placeholder="Strategy content and instructions"
-                          rows={4}
-                        />
-                        <div className="grid grid-cols-3 gap-4">
-                          <Select
-                            value={strategy.priority}
-                            onValueChange={(value: 'high' | 'medium' | 'low') =>
-                              handleUpdateStrategy(strategy.id, { priority: value })
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="high">High Priority</SelectItem>
-                              <SelectItem value="medium">Medium Priority</SelectItem>
-                              <SelectItem value="low">Low Priority</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <Select
-                            value={strategy.status}
-                            onValueChange={(value: 'draft' | 'active' | 'completed') =>
-                              handleUpdateStrategy(strategy.id, { status: value })
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="draft">Draft</SelectItem>
-                              <SelectItem value="active">Active</SelectItem>
-                              <SelectItem value="completed">Completed</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <Select
-                            value={strategy.phase.toString()}
-                            onValueChange={(value) =>
-                              handleUpdateStrategy(strategy.id, { phase: parseInt(value) })
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="0">Phase 0</SelectItem>
-                              <SelectItem value="1">Phase 1</SelectItem>
-                              <SelectItem value="2">Phase 2</SelectItem>
-                              <SelectItem value="3">Phase 3</SelectItem>
-                              <SelectItem value="4">Phase 4</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="flex space-x-2">
-                          <Button size="sm" onClick={() => setEditingStrategy(null)}>
-                            <Save className="w-3 h-3 mr-1" />
-                            Save
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={() => setEditingStrategy(null)}>
-                            Cancel
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <div className="flex items-center justify-between mb-3">
-                          <div>
-                            <h4 className="font-semibold">{strategy.title}</h4>
-                            <p className="text-sm text-gray-600">
-                              For {strategy.creatorName} • Phase {strategy.phase}
-                            </p>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <Badge className={getPriorityColor(strategy.priority)}>
-                              {strategy.priority}
-                            </Badge>
-                            <Badge className={getStatusColor(strategy.status)}>
-                              {strategy.status}
-                            </Badge>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => setEditingStrategy(strategy.id)}
-                            >
-                              <Edit className="w-3 h-3" />
-                            </Button>
-                          </div>
-                        </div>
-                        
-                        <p className="text-sm text-gray-600 mb-3">{strategy.description}</p>
-                        
-                        <div className="bg-gray-50 p-3 rounded mb-3">
-                          <p className="text-sm">{strategy.content}</p>
-                        </div>
-                        
-                        {strategy.tags.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mb-3">
-                            {strategy.tags.map((tag) => (
-                              <Badge key={tag} variant="secondary" className="text-xs">
-                                #{tag}
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
-                        
-                        <div className="flex items-center justify-between text-xs text-gray-500">
-                          <span>Created: {new Date(strategy.createdAt).toLocaleDateString()}</span>
-                          <div className="flex space-x-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => copyToClipboard(strategy.content)}
-                            >
-                              <Copy className="w-3 h-3 mr-1" />
-                              Copy
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleDeleteStrategy(strategy.id)}
-                              className="text-red-600 hover:text-red-700"
-                            >
-                              <Trash2 className="w-3 h-3 mr-1" />
-                              Delete
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-lg">{strategy.title}</CardTitle>
+                      <Badge className={getPriorityColor(strategy.priority)}>
+                        {strategy.priority}
+                      </Badge>
+                    </div>
+                    <CardDescription>{strategy.description}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <p className="text-sm text-gray-700 line-clamp-3">{strategy.content}</p>
+
+                    <div className="flex flex-wrap gap-1">
+                      {strategy.phase.map((phase) => (
+                        <Badge key={phase} className={getPhaseColor(phase)}>
+                          Phase {phase}
+                        </Badge>
+                      ))}
+                      {strategy.category.map((category) => (
+                        <Badge key={category} variant="secondary" className="text-xs">
+                          {category}
+                        </Badge>
+                      ))}
+                    </div>
+
+                    <div className="flex justify-between items-center text-sm text-gray-500">
+                      <span>Used {strategy.useCount} times</span>
+                      <span>{strategy.linkedCreators.length} creators linked</span>
+                    </div>
+
+                    <div className="flex space-x-2">
+                      <Button size="sm" className="flex-1" onClick={() => handleUseStrategy(strategy)}>
+                        <Copy className="w-3 h-3 mr-1" />
+                        Use
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => handleEditStrategy(strategy)}>
+                        <Edit className="w-3 h-3" />
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        onClick={() => handleDeleteStrategy(strategy.id)}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               ))}
-              
+
               {customStrategies.length === 0 && (
-                <Card>
-                  <CardContent className="text-center py-12">
-                    <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-500 mb-4">No custom strategies created yet</p>
-                    <Button onClick={() => setIsCreatingStrategy(true)}>
-                      <Plus className="w-4 h-4 mr-2" />
-                      Create Your First Strategy
-                    </Button>
-                  </CardContent>
-                </Card>
+                <div className="col-span-full text-center py-12">
+                  <Target className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-500 mb-4">No custom strategies yet</p>
+                  <Button onClick={() => setIsCreatingStrategy(true)}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create Your First Strategy
+                  </Button>
+                </div>
               )}
             </div>
           </div>
@@ -814,6 +705,43 @@ export default function StrategyGuide({ creators = [] }: StrategyGuideProps) {
                 </CardContent>
               </Card>
             ))}
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Zap className="w-5 h-5 mr-2" />
+                  Next Steps Template
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded">
+                    <span className="font-medium">Finalize Pricing Strategy</span>
+                    <Button size="sm" variant="outline" onClick={() => copyToClipboard(nextStepsTemplate.pricingFinalization)}>
+                      <Copy className="w-3 h-3" />
+                    </Button>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded">
+                    <span className="font-medium">CTA Alignment</span>
+                    <Button size="sm" variant="outline" onClick={() => copyToClipboard(nextStepsTemplate.ctaAlignment)}>
+                      <Copy className="w-3 h-3" />
+                    </Button>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded">
+                    <span className="font-medium">Reel Scheduling</span>
+                    <Button size="sm" variant="outline" onClick={() => copyToClipboard(nextStepsTemplate.reelScheduling)}>
+                      <Copy className="w-3 h-3" />
+                    </Button>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded">
+                    <span className="font-medium">Ad Boosting Setup</span>
+                    <Button size="sm" variant="outline" onClick={() => copyToClipboard(nextStepsTemplate.adBoosting)}>
+                      <Copy className="w-3 h-3" />
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
 
@@ -837,7 +765,7 @@ export default function StrategyGuide({ creators = [] }: StrategyGuideProps) {
                       <div className="grid gap-3">
                         {creators.map((creator) => {
                           const recommendations = getPhaseRecommendations(creator.phaseNumber)
-                          const customStrategiesCount = getCreatorCustomStrategies(creator.id).length
+                          const customStrategiesForCreator = getCustomStrategiesForCreator(creator)
                           return (
                             <div key={creator.id} className="border rounded-lg p-4">
                               <div className="flex items-center justify-between mb-2">
@@ -859,9 +787,9 @@ export default function StrategyGuide({ creators = [] }: StrategyGuideProps) {
                               <div className="text-sm text-gray-600">
                                 <strong>Recommended strategies:</strong> {recommendations.map(r => r.title).join(', ')}
                               </div>
-                              {customStrategiesCount > 0 && (
-                                <div className="text-sm text-blue-600 mt-1">
-                                  <strong>Custom strategies:</strong> {customStrategiesCount} created
+                              {customStrategiesForCreator.length > 0 && (
+                                <div className="text-sm text-gray-600 mt-1">
+                                  <strong>Custom strategies:</strong> {customStrategiesForCreator.map(s => s.title).join(', ')}
                                 </div>
                               )}
                             </div>
@@ -877,50 +805,37 @@ export default function StrategyGuide({ creators = [] }: StrategyGuideProps) {
         </TabsContent>
       </Tabs>
 
-      {/* Create Strategy Modal */}
+      {/* Create/Edit Strategy Modal */}
       {isCreatingStrategy && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>Create Custom Strategy</CardTitle>
-                <Button variant="outline" size="sm" onClick={() => setIsCreatingStrategy(false)}>
+                <CardTitle>{editingStrategy ? 'Edit Strategy' : 'Create Custom Strategy'}</CardTitle>
+                <Button variant="outline" size="sm" onClick={() => {
+                  setIsCreatingStrategy(false)
+                  setEditingStrategy(null)
+                  setNewStrategy({
+                    title: '',
+                    description: '',
+                    content: '',
+                    phase: [],
+                    category: [],
+                    priority: 'medium',
+                    tasks: []
+                  })
+                }}>
                   <X className="w-4 h-4" />
                 </Button>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-2">Creator *</label>
-                <Select
-                  value={selectedCreator?.id.toString() || ''}
-                  onValueChange={(value) => {
-                    const creator = creators.find(c => c.id === parseInt(value))
-                    if (creator) {
-                      setSelectedCreator(creator)
-                      setNewStrategy({ ...newStrategy, phase: creator.phaseNumber })
-                    }
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select creator" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {creators.map((creator) => (
-                      <SelectItem key={creator.id} value={creator.id.toString()}>
-                        {creator.name} - {creator.category} ({creator.region})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
                 <label className="block text-sm font-medium mb-2">Strategy Title *</label>
                 <Input
                   value={newStrategy.title || ''}
-                  onChange={(e) => setNewStrategy({ ...newStrategy, title: e.target.value })}
-                  placeholder="e.g., Custom Launch Strategy for Gaming Audience"
+                  onChange={(e) => setNewStrategy({...newStrategy, title: e.target.value})}
+                  placeholder="Enter strategy title"
                 />
               </div>
 
@@ -928,7 +843,7 @@ export default function StrategyGuide({ creators = [] }: StrategyGuideProps) {
                 <label className="block text-sm font-medium mb-2">Description</label>
                 <Input
                   value={newStrategy.description || ''}
-                  onChange={(e) => setNewStrategy({ ...newStrategy, description: e.target.value })}
+                  onChange={(e) => setNewStrategy({...newStrategy, description: e.target.value})}
                   placeholder="Brief description of the strategy"
                 />
               </div>
@@ -937,106 +852,115 @@ export default function StrategyGuide({ creators = [] }: StrategyGuideProps) {
                 <label className="block text-sm font-medium mb-2">Strategy Content *</label>
                 <Textarea
                   value={newStrategy.content || ''}
-                  onChange={(e) => setNewStrategy({ ...newStrategy, content: e.target.value })}
-                  placeholder="Detailed strategy instructions, scripts, and implementation steps..."
-                  rows={6}
+                  onChange={(e) => setNewStrategy({...newStrategy, content: e.target.value})}
+                  placeholder="Enter the strategy content, script, or instructions..."
+                  rows={4}
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-2">Phase</label>
-                  <Select
-                    value={newStrategy.phase?.toString() || '1'}
-                    onValueChange={(value) => setNewStrategy({ ...newStrategy, phase: parseInt(value) })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="0">Phase 0: Strategy Call</SelectItem>
-                      <SelectItem value="1">Phase 1: Drop Prep</SelectItem>
-                      <SelectItem value="2">Phase 2: Launch Week</SelectItem>
-                      <SelectItem value="3">Phase 3: Sell-Out Push</SelectItem>
-                      <SelectItem value="4">Phase 4: Post-Sellout</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <label className="block text-sm font-medium mb-2">Applicable Phases</label>
+                  <div className="space-y-2">
+                    {[0, 1, 2, 3, 4].map((phase) => (
+                      <label key={phase} className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={newStrategy.phase?.includes(phase) || false}
+                          onChange={(e) => {
+                            const phases = newStrategy.phase || []
+                            if (e.target.checked) {
+                              setNewStrategy({...newStrategy, phase: [...phases, phase]})
+                            } else {
+                              setNewStrategy({...newStrategy, phase: phases.filter(p => p !== phase)})
+                            }
+                          }}
+                          className="mr-2"
+                        />
+                        <span className="text-sm">Phase {phase}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-2">Priority</label>
-                  <Select
-                    value={newStrategy.priority || 'medium'}
-                    onValueChange={(value: 'high' | 'medium' | 'low') =>
-                      setNewStrategy({ ...newStrategy, priority: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="high">High Priority</SelectItem>
-                      <SelectItem value="medium">Medium Priority</SelectItem>
-                      <SelectItem value="low">Low Priority</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-2">Status</label>
-                  <Select
-                    value={newStrategy.status || 'draft'}
-                    onValueChange={(value: 'draft' | 'active' | 'completed') =>
-                      setNewStrategy({ ...newStrategy, status: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="draft">Draft</SelectItem>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="completed">Completed</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <label className="block text-sm font-medium mb-2">Creator Categories</label>
+                  <div className="space-y-2">
+                    {['Gaming', 'Music', 'Streaming', 'Lifestyle', 'Comedy', 'Fashion'].map((category) => (
+                      <label key={category} className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={newStrategy.category?.includes(category) || false}
+                          onChange={(e) => {
+                            const categories = newStrategy.category || []
+                            if (e.target.checked) {
+                              setNewStrategy({...newStrategy, category: [...categories, category]})
+                            } else {
+                              setNewStrategy({...newStrategy, category: categories.filter(c => c !== category)})
+                            }
+                          }}
+                          className="mr-2"
+                        />
+                        <span className="text-sm">{category}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">Tags</label>
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {newStrategy.tags?.map((tag) => (
-                    <Badge
-                      key={tag}
-                      variant="secondary"
-                      className="cursor-pointer"
-                      onClick={() => removeTagFromNewStrategy(tag)}
-                    >
-                      #{tag} ×
-                    </Badge>
-                  ))}
-                </div>
-                <Input
-                  placeholder="Add tags (press Enter to add)"
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter' && e.currentTarget.value.trim()) {
-                      addTagToNewStrategy(e.currentTarget.value.trim())
-                      e.currentTarget.value = ''
-                    }
-                  }}
+                <label className="block text-sm font-medium mb-2">Priority</label>
+                <Select
+                  value={newStrategy.priority || 'medium'}
+                  onValueChange={(value: 'high' | 'medium' | 'low') => setNewStrategy({...newStrategy, priority: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="high">High Priority</SelectItem>
+                    <SelectItem value="medium">Medium Priority</SelectItem>
+                    <SelectItem value="low">Low Priority</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Associated Tasks (Optional)</label>
+                <Textarea
+                  value={newStrategy.tasks?.join('\n') || ''}
+                  onChange={(e) => setNewStrategy({
+                    ...newStrategy, 
+                    tasks: e.target.value.split('\n').filter(task => task.trim())
+                  })}
+                  placeholder="Enter tasks, one per line..."
+                  rows={3}
                 />
+                <p className="text-xs text-gray-500 mt-1">Enter each task on a new line</p>
               </div>
 
               <div className="flex space-x-3 pt-4">
                 <Button
-                  onClick={handleCreateStrategy}
-                  disabled={!selectedCreator || !newStrategy.title || !newStrategy.content}
+                  onClick={editingStrategy ? handleSaveEdit : handleCreateStrategy}
+                  disabled={!newStrategy.title || !newStrategy.content}
                   className="flex-1"
                 >
                   <Save className="w-4 h-4 mr-2" />
-                  Create Strategy
+                  {editingStrategy ? 'Save Changes' : 'Create Strategy'}
                 </Button>
-                <Button variant="outline" onClick={() => setIsCreatingStrategy(false)}>
+                <Button variant="outline" onClick={() => {
+                  setIsCreatingStrategy(false)
+                  setEditingStrategy(null)
+                  setNewStrategy({
+                    title: '',
+                    description: '',
+                    content: '',
+                    phase: [],
+                    category: [],
+                    priority: 'medium',
+                    tasks: []
+                  })
+                }}>
                   Cancel
                 </Button>
               </div>

@@ -26,7 +26,9 @@ import {
   DollarSign,
   TrendingUp,
   Settings,
-  Tag
+  Tag,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react'
 import AssetUpload from './AssetUpload'
 import PhaseManager from './PhaseManager'
@@ -86,6 +88,14 @@ const regions = [
 ]
 
 const salesVelocityOptions = ['Pending', 'Low', 'Medium', 'High', 'Very High']
+
+const phases = [
+  { number: 0, name: 'Phase 0: Strategy Call', color: 'bg-blue-100 text-blue-800' },
+  { number: 1, name: 'Phase 1: Drop Prep', color: 'bg-yellow-100 text-yellow-800' },
+  { number: 2, name: 'Phase 2: Launch Week', color: 'bg-green-100 text-green-800' },
+  { number: 3, name: 'Phase 3: Sell-Out Push', color: 'bg-orange-100 text-orange-800' },
+  { number: 4, name: 'Phase 4: Post-Sellout', color: 'bg-purple-100 text-purple-800' }
+]
 
 export default function CreatorManagement({
   creators,
@@ -187,6 +197,29 @@ export default function CreatorManagement({
       setSelectedCreator(null)
     }
     success('Creator deleted successfully')
+  }
+
+  const handlePhaseChange = (creatorId: number, newPhaseNumber: number) => {
+    const phase = phases.find(p => p.number === newPhaseNumber)
+    if (!phase) return
+
+    const updatedCreators = creators.map(creator =>
+      creator.id === creatorId
+        ? {
+            ...creator,
+            phaseNumber: newPhaseNumber,
+            phase: phase.name,
+            daysInPhase: 0, // Reset days when manually changing phase
+            lastUpdated: new Date().toISOString().split('T')[0]
+          }
+        : creator
+    )
+
+    onCreatorsUpdate(updatedCreators)
+    if (selectedCreator?.id === creatorId) {
+      setSelectedCreator(updatedCreators.find(c => c.id === creatorId) || null)
+    }
+    success(`Creator moved to ${phase.name}`)
   }
 
   const startEditing = (creator: Creator) => {
@@ -501,11 +534,11 @@ export default function CreatorManagement({
             </Card>
           ) : selectedCreator ? (
             <Tabs defaultValue="overview" className="space-y-6">
-              <TabsList>
-                <TabsTrigger value="overview">Overview</TabsTrigger>
-                <TabsTrigger value="assets">Assets</TabsTrigger>
-                <TabsTrigger value="phases">Phases</TabsTrigger>
-                <TabsTrigger value="strategy">Strategy</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-4 h-12">
+                <TabsTrigger value="overview" className="text-sm">Overview</TabsTrigger>
+                <TabsTrigger value="assets" className="text-sm">Assets</TabsTrigger>
+                <TabsTrigger value="phases" className="text-sm">Phases</TabsTrigger>
+                <TabsTrigger value="strategy" className="text-sm">Strategy</TabsTrigger>
               </TabsList>
 
               <TabsContent value="overview">
@@ -657,6 +690,39 @@ export default function CreatorManagement({
                             />
                           </div>
                           <div>
+                            <label className="block text-sm font-medium mb-2">Current Phase</label>
+                            <Select
+                              value={editForm.phaseNumber?.toString() || ''}
+                              onValueChange={(value) => {
+                                const phaseNumber = Number(value)
+                                const phase = phases.find(p => p.number === phaseNumber)
+                                if (phase) {
+                                  setEditForm({ 
+                                    ...editForm, 
+                                    phaseNumber,
+                                    phase: phase.name,
+                                    daysInPhase: 0 // Reset days when changing phase
+                                  })
+                                }
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {phases.map((phase) => (
+                                  <SelectItem key={phase.number} value={phase.number.toString()}>
+                                    <div className="flex items-center space-x-2">
+                                      <Badge className={phase.color}>
+                                        {phase.name}
+                                      </Badge>
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
                             <label className="block text-sm font-medium mb-2">Stacked Profile URL</label>
                             <Input
                               value={editForm.stackedProfileUrl || ''}
@@ -769,6 +835,48 @@ export default function CreatorManagement({
                             </div>
                             <p className="text-lg font-bold text-purple-600 mt-1">{selectedCreator.phaseNumber}</p>
                             <p className="text-xs text-purple-600">{selectedCreator.daysInPhase} days</p>
+                          </div>
+                        </div>
+
+                        {/* Phase Management */}
+                        <div>
+                          <h3 className="text-lg font-semibold mb-3">Phase Management</h3>
+                          <div className="flex items-center space-x-4 p-4 bg-gray-50 rounded-lg">
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-2 mb-1">
+                                <Badge className={phases.find(p => p.number === selectedCreator.phaseNumber)?.color}>
+                                  {selectedCreator.phase}
+                                </Badge>
+                                <span className="text-sm text-gray-600">
+                                  Day {selectedCreator.daysInPhase}
+                                </span>
+                              </div>
+                              <p className="text-sm text-gray-600">
+                                Next task: {selectedCreator.nextTask}
+                              </p>
+                            </div>
+                            <div className="flex space-x-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handlePhaseChange(selectedCreator.id, Math.max(0, selectedCreator.phaseNumber - 1))}
+                                disabled={selectedCreator.phaseNumber === 0}
+                                title="Move to previous phase"
+                              >
+                                <ArrowUp className="w-4 h-4" />
+                                Previous
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handlePhaseChange(selectedCreator.id, Math.min(4, selectedCreator.phaseNumber + 1))}
+                                disabled={selectedCreator.phaseNumber === 4}
+                                title="Move to next phase"
+                              >
+                                Next
+                                <ArrowDown className="w-4 h-4 ml-1" />
+                              </Button>
+                            </div>
                           </div>
                         </div>
 

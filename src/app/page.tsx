@@ -458,15 +458,15 @@ export default function Dashboard() {
 
         {/* Main Content */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-8">
-            <TabsTrigger value="pipeline">Creator Pipeline</TabsTrigger>
-            <TabsTrigger value="creators">Creator Management</TabsTrigger>
-            <TabsTrigger value="content">Content</TabsTrigger>
-            <TabsTrigger value="calendar">Calendar</TabsTrigger>
-            <TabsTrigger value="strategy">Strategy Guide</TabsTrigger>
-            <TabsTrigger value="analytics">Analytics</TabsTrigger>
-            <TabsTrigger value="employees">Team</TabsTrigger>
-            <TabsTrigger value="airtable">Airtable</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-8 h-12 p-1">
+            <TabsTrigger value="pipeline" className="text-sm px-3">Creator Pipeline</TabsTrigger>
+            <TabsTrigger value="creators" className="text-sm px-3">Creator Management</TabsTrigger>
+            <TabsTrigger value="content" className="text-sm px-3">Content</TabsTrigger>
+            <TabsTrigger value="calendar" className="text-sm px-3">Calendar</TabsTrigger>
+            <TabsTrigger value="strategy" className="text-sm px-3">Strategy Guide</TabsTrigger>
+            <TabsTrigger value="analytics" className="text-sm px-3">Analytics</TabsTrigger>
+            <TabsTrigger value="employees" className="text-sm px-3">Team</TabsTrigger>
+            <TabsTrigger value="airtable" className="text-sm px-3">Airtable</TabsTrigger>
           </TabsList>
 
           <TabsContent value="pipeline">

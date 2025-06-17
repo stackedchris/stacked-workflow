@@ -28,6 +28,7 @@ import ContentManager from '@/components/ContentManager'
 import ContentCalendar from '@/components/ContentCalendar'
 import StrategyGuide from '@/components/StrategyGuide'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
+import { useToast } from '@/components/ui/toast'
 
 // Mock data for creators - Updated with full creator objects for testing
 const creators = [
@@ -246,6 +247,7 @@ export default function Dashboard() {
   const [activeTab, setActiveTab, isTabHydrated] = useLocalStorage('stacked-active-tab', "pipeline")
   const [isAutoSyncing, setIsAutoSyncing] = useState(false)
   const [lastSyncTime, setLastSyncTime, isSyncTimeHydrated] = useLocalStorage('stacked-last-sync', '')
+  const { success, error } = useToast()
 
   // Update selected creator when allCreators changes or hydrates
   useEffect(() => {
@@ -326,11 +328,11 @@ export default function Dashboard() {
     const updatedCreator = updatedCreators.find(c => c.id === creatorId)
     if (updatedCreator) {
       const wasProgressed = updatedCreator.phaseNumber > creator.phaseNumber
-      const message = wasProgressed 
-        ? `🎉 ${creator.name} progressed to ${updatedCreator.phase}!\nNext: ${updatedCreator.nextTask}`
-        : `✅ Task completed for ${creator.name}!\nNext: ${updatedCreator.nextTask}`
-      
-      alert(message)
+      if (wasProgressed) {
+        success(`${creator.name} progressed to ${updatedCreator.phase}!`, `Next: ${updatedCreator.nextTask}`)
+      } else {
+        success(`Task completed for ${creator.name}`, `Next: ${updatedCreator.nextTask}`)
+      }
     }
   }
 
@@ -347,7 +349,7 @@ export default function Dashboard() {
     const prompt = prompts[creator.phaseNumber as keyof typeof prompts] || `Great work ${creator.name}! Keep up the momentum.`
     
     navigator.clipboard.writeText(prompt)
-    alert(`📋 Content prompt copied to clipboard!\n\nYou can now paste and send this to ${creator.name} via your preferred communication method.`)
+    success('Content prompt copied to clipboard', `Ready to send to ${creator.name}`)
   }
 
   // Handle viewing analytics

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -22,7 +22,14 @@ import {
   ChevronDown,
   AlertTriangle,
   Zap,
-  Minus
+  Minus,
+  Upload,
+  Image,
+  Video,
+  FileText,
+  Trash2,
+  Download,
+  Eye
 } from 'lucide-react'
 
 interface PhaseTask {
@@ -33,6 +40,16 @@ interface PhaseTask {
   dueDate?: string
   assignedTo?: string
   priority: 'high' | 'medium' | 'low'
+  media?: TaskMedia[]
+}
+
+interface TaskMedia {
+  id: string
+  name: string
+  type: 'image' | 'video' | 'document'
+  url: string
+  size: number
+  uploadDate: string
 }
 
 interface CreatorPhase {
@@ -93,34 +110,34 @@ const defaultPhaseTemplates: Omit<CreatorPhase, 'tasks' | 'isActive'>[] = [
 
 const defaultTasks: Record<number, PhaseTask[]> = {
   0: [
-    { id: '0-1', title: 'Initial strategy call', description: 'Discuss goals, audience, and pricing', completed: false, priority: 'high' },
-    { id: '0-2', title: 'Define target audience', description: 'Research and document target demographics', completed: false, priority: 'high' },
-    { id: '0-3', title: 'Set pricing strategy', description: 'Determine card price and total quantity', completed: false, priority: 'medium' },
-    { id: '0-4', title: 'Content strategy planning', description: 'Plan content themes and posting schedule', completed: false, priority: 'medium' }
+    { id: '0-1', title: 'Initial strategy call', description: 'Discuss goals, audience, and pricing', completed: false, priority: 'high', media: [] },
+    { id: '0-2', title: 'Define target audience', description: 'Research and document target demographics', completed: false, priority: 'high', media: [] },
+    { id: '0-3', title: 'Set pricing strategy', description: 'Determine card price and total quantity', completed: false, priority: 'medium', media: [] },
+    { id: '0-4', title: 'Content strategy planning', description: 'Plan content themes and posting schedule', completed: false, priority: 'medium', media: [] }
   ],
   1: [
-    { id: '1-1', title: 'Create teaser content', description: 'Design and produce announcement materials', completed: false, priority: 'high' },
-    { id: '1-2', title: 'Set up tracking systems', description: 'Configure analytics and monitoring tools', completed: false, priority: 'medium' },
-    { id: '1-3', title: 'Prepare launch assets', description: 'Finalize all marketing materials', completed: false, priority: 'high' },
-    { id: '1-4', title: 'Schedule content calendar', description: 'Plan and schedule all launch week content', completed: false, priority: 'medium' }
+    { id: '1-1', title: 'Create teaser content', description: 'Design and produce announcement materials', completed: false, priority: 'high', media: [] },
+    { id: '1-2', title: 'Set up tracking systems', description: 'Configure analytics and monitoring tools', completed: false, priority: 'medium', media: [] },
+    { id: '1-3', title: 'Prepare launch assets', description: 'Finalize all marketing materials', completed: false, priority: 'high', media: [] },
+    { id: '1-4', title: 'Schedule content calendar', description: 'Plan and schedule all launch week content', completed: false, priority: 'medium', media: [] }
   ],
   2: [
-    { id: '2-1', title: 'Launch announcement', description: 'Post official launch across all platforms', completed: false, priority: 'high' },
-    { id: '2-2', title: 'Daily engagement posts', description: 'Share behind-the-scenes and updates', completed: false, priority: 'high' },
-    { id: '2-3', title: 'Community interaction', description: 'Respond to comments and build excitement', completed: false, priority: 'medium' },
-    { id: '2-4', title: 'Monitor sales progress', description: 'Track sales and adjust strategy as needed', completed: false, priority: 'high' }
+    { id: '2-1', title: 'Launch announcement', description: 'Post official launch across all platforms', completed: false, priority: 'high', media: [] },
+    { id: '2-2', title: 'Daily engagement posts', description: 'Share behind-the-scenes and updates', completed: false, priority: 'high', media: [] },
+    { id: '2-3', title: 'Community interaction', description: 'Respond to comments and build excitement', completed: false, priority: 'medium', media: [] },
+    { id: '2-4', title: 'Monitor sales progress', description: 'Track sales and adjust strategy as needed', completed: false, priority: 'high', media: [] }
   ],
   3: [
-    { id: '3-1', title: 'Create urgency content', description: 'Post about limited quantities remaining', completed: false, priority: 'high' },
-    { id: '3-2', title: 'Final push campaign', description: 'Execute intensive sales campaign', completed: false, priority: 'high' },
-    { id: '3-3', title: 'Leverage FOMO', description: 'Share social proof and testimonials', completed: false, priority: 'medium' },
-    { id: '3-4', title: 'Last chance messaging', description: 'Final opportunity communications', completed: false, priority: 'high' }
+    { id: '3-1', title: 'Create urgency content', description: 'Post about limited quantities remaining', completed: false, priority: 'high', media: [] },
+    { id: '3-2', title: 'Final push campaign', description: 'Execute intensive sales campaign', completed: false, priority: 'high', media: [] },
+    { id: '3-3', title: 'Leverage FOMO', description: 'Share social proof and testimonials', completed: false, priority: 'medium', media: [] },
+    { id: '3-4', title: 'Last chance messaging', description: 'Final opportunity communications', completed: false, priority: 'high', media: [] }
   ],
   4: [
-    { id: '4-1', title: 'Thank you message', description: 'Express gratitude to all supporters', completed: false, priority: 'medium' },
-    { id: '4-2', title: 'Deliver exclusive content', description: 'Provide promised exclusive materials', completed: false, priority: 'high' },
-    { id: '4-3', title: 'Gather feedback', description: 'Collect insights for future improvements', completed: false, priority: 'low' },
-    { id: '4-4', title: 'Plan next campaign', description: 'Begin planning for future opportunities', completed: false, priority: 'low' }
+    { id: '4-1', title: 'Thank you message', description: 'Express gratitude to all supporters', completed: false, priority: 'medium', media: [] },
+    { id: '4-2', title: 'Deliver exclusive content', description: 'Provide promised exclusive materials', completed: false, priority: 'high', media: [] },
+    { id: '4-3', title: 'Gather feedback', description: 'Collect insights for future improvements', completed: false, priority: 'low', media: [] },
+    { id: '4-4', title: 'Plan next campaign', description: 'Begin planning for future opportunities', completed: false, priority: 'low', media: [] }
   ]
 }
 
@@ -134,7 +151,8 @@ export default function PhaseManager({ creatorId, creatorName, currentPhase, onP
   )
   const [expandedPhases, setExpandedPhases] = useState<Set<number>>(new Set([currentPhase]))
   const [editingTask, setEditingTask] = useState<string | null>(null)
-  const [newTaskPhase, setNewTaskPhase] = useState<number | null>(null)
+  const [uploadingMedia, setUploadingMedia] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const togglePhaseExpansion = (phaseId: number) => {
     const newExpanded = new Set(expandedPhases)
@@ -168,7 +186,8 @@ export default function PhaseManager({ creatorId, creatorName, currentPhase, onP
       title: 'New Task',
       description: 'Task description',
       completed: false,
-      priority: 'medium'
+      priority: 'medium',
+      media: []
     }
 
     const updatedPhases = phases.map(phase =>
@@ -213,6 +232,107 @@ export default function PhaseManager({ creatorId, creatorName, currentPhase, onP
     }
   }
 
+  const handleMediaUpload = (phaseId: number, taskId: string, files: FileList | null) => {
+    if (!files) return
+
+    setUploadingMedia(taskId)
+
+    // Process each file
+    Array.from(files).forEach((file, index) => {
+      // Validate file
+      if (file.size > 50 * 1024 * 1024) { // 50MB limit
+        alert(`File ${file.name} is too large. Maximum size is 50MB.`)
+        return
+      }
+
+      const newMedia: TaskMedia = {
+        id: `${taskId}-media-${Date.now()}-${index}`,
+        name: file.name,
+        type: file.type.startsWith('image/') ? 'image' :
+              file.type.startsWith('video/') ? 'video' : 'document',
+        url: URL.createObjectURL(file),
+        size: file.size,
+        uploadDate: new Date().toISOString()
+      }
+
+      // Add media to task
+      const updatedPhases = phases.map(phase => {
+        if (phase.id === phaseId) {
+          return {
+            ...phase,
+            tasks: phase.tasks.map(task =>
+              task.id === taskId 
+                ? { ...task, media: [...(task.media || []), newMedia] }
+                : task
+            )
+          }
+        }
+        return phase
+      })
+      
+      setPhases(updatedPhases)
+      onPhaseUpdate(updatedPhases)
+    })
+
+    setTimeout(() => {
+      setUploadingMedia(null)
+      alert(`✅ Successfully uploaded ${files.length} file(s)!`)
+    }, 1000)
+  }
+
+  const removeMedia = (phaseId: number, taskId: string, mediaId: string) => {
+    if (confirm('Are you sure you want to remove this media?')) {
+      const updatedPhases = phases.map(phase => {
+        if (phase.id === phaseId) {
+          return {
+            ...phase,
+            tasks: phase.tasks.map(task => {
+              if (task.id === taskId) {
+                // Clean up object URL
+                const mediaToRemove = task.media?.find(m => m.id === mediaId)
+                if (mediaToRemove?.url) {
+                  URL.revokeObjectURL(mediaToRemove.url)
+                }
+                return {
+                  ...task,
+                  media: task.media?.filter(m => m.id !== mediaId) || []
+                }
+              }
+              return task
+            })
+          }
+        }
+        return phase
+      })
+      
+      setPhases(updatedPhases)
+      onPhaseUpdate(updatedPhases)
+    }
+  }
+
+  const downloadMedia = (media: TaskMedia) => {
+    const a = document.createElement('a')
+    a.href = media.url
+    a.download = media.name
+    a.click()
+  }
+
+  const previewMedia = (media: TaskMedia) => {
+    if (media.type === 'image' || media.type === 'video') {
+      window.open(media.url, '_blank')
+    } else {
+      downloadMedia(media)
+    }
+  }
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return `${Number.parseFloat((bytes / k ** i).toFixed(2))} ${sizes[i]}`
+  }
+
   const getPhaseProgress = (phase: CreatorPhase) => {
     if (phase.tasks.length === 0) return 0
     const completedTasks = phase.tasks.filter(task => task.completed).length
@@ -234,6 +354,15 @@ export default function PhaseManager({ creatorId, creatorName, currentPhase, onP
       case 'medium': return <Zap className="w-3 h-3" />
       case 'low': return <Minus className="w-3 h-3" />
       default: return <Minus className="w-3 h-3" />
+    }
+  }
+
+  const getMediaIcon = (type: string) => {
+    switch (type) {
+      case 'image': return <Image className="w-4 h-4 text-blue-500" />
+      case 'video': return <Video className="w-4 h-4 text-purple-500" />
+      case 'document': return <FileText className="w-4 h-4 text-green-500" />
+      default: return <FileText className="w-4 h-4 text-gray-500" />
     }
   }
 
@@ -423,6 +552,75 @@ export default function PhaseManager({ creatorId, creatorName, currentPhase, onP
                                   )}
                                 </div>
                               )}
+
+                              {/* Media Section */}
+                              <div className="mt-3">
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-sm font-medium">Attachments ({task.media?.length || 0})</span>
+                                  <div className="flex space-x-1">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => {
+                                        fileInputRef.current?.click()
+                                        setUploadingMedia(task.id)
+                                      }}
+                                      disabled={uploadingMedia === task.id}
+                                    >
+                                      <Upload className="w-3 h-3 mr-1" />
+                                      {uploadingMedia === task.id ? 'Uploading...' : 'Add Media'}
+                                    </Button>
+                                  </div>
+                                </div>
+
+                                {/* Media Grid */}
+                                {task.media && task.media.length > 0 && (
+                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                    {task.media.map((media) => (
+                                      <div key={media.id} className="border rounded-lg p-2 hover:bg-gray-50">
+                                        <div className="flex items-center space-x-2 mb-1">
+                                          {getMediaIcon(media.type)}
+                                          <span className="text-xs font-medium truncate">{media.name}</span>
+                                        </div>
+                                        <p className="text-xs text-gray-500 mb-2">{formatFileSize(media.size)}</p>
+                                        <div className="flex space-x-1">
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => previewMedia(media)}
+                                            className="flex-1 text-xs"
+                                          >
+                                            <Eye className="w-3 h-3" />
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => downloadMedia(media)}
+                                            className="flex-1 text-xs"
+                                          >
+                                            <Download className="w-3 h-3" />
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => removeMedia(phase.id, task.id, media.id)}
+                                            className="text-red-600 hover:text-red-700"
+                                          >
+                                            <Trash2 className="w-3 h-3" />
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {(!task.media || task.media.length === 0) && (
+                                  <div className="text-center py-4 border-2 border-dashed border-gray-300 rounded-lg">
+                                    <Upload className="w-6 h-6 text-gray-400 mx-auto mb-1" />
+                                    <p className="text-xs text-gray-500">No attachments yet</p>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           )}
                         </div>
@@ -445,6 +643,29 @@ export default function PhaseManager({ creatorId, creatorName, currentPhase, onP
           )
         })}
       </div>
+
+      {/* Hidden file input for media uploads */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*,video/*,.pdf,.doc,.docx,.txt"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          if (uploadingMedia && e.target.files) {
+            // Find the phase and task for the current upload
+            for (const phase of phases) {
+              const task = phase.tasks.find(t => t.id === uploadingMedia)
+              if (task) {
+                handleMediaUpload(phase.id, task.id, e.target.files)
+                break
+              }
+            }
+          }
+          // Reset the input
+          e.target.value = ''
+        }}
+      />
     </div>
   )
 }

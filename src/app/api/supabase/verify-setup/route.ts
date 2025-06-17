@@ -21,38 +21,39 @@ export async function POST(request: NextRequest) {
         success: false,
         step: 'connection',
         error: `Connection failed: ${authError.message}`,
-        solution: 'Check your Supabase URL and API key'
+        solution: 'Check your Supabase URL and API key',
+        needsManualSetup: true
       })
     }
 
     console.log('✅ Basic connection successful')
 
-    // Test 2: Check if tables exist and create them if needed
+    // Test 2: Check if tables exist
     console.log('Test 2: Checking database tables...')
     
-    // Try to query creators table
     const { data: creatorsTest, error: creatorsError } = await supabase
       .from('creators')
       .select('count')
       .limit(1)
 
     if (creatorsError) {
-      console.log('⚠️ Creators table not found, attempting to create...')
+      console.log('⚠️ Creators table issue:', creatorsError.message)
       
-      // Create creators table
-      const { error: createError } = await supabase.rpc('create_creators_table')
-      
-      if (createError) {
-        console.log('📝 Creating tables via SQL...')
-        
-        // If RPC doesn't work, we'll return instructions for manual setup
-        return NextResponse.json({
-          success: false,
-          step: 'tables',
-          error: 'Database tables not found',
-          solution: 'Please run the database migrations in your Supabase dashboard',
-          sqlToRun: `
--- Create creators table
+      return NextResponse.json({
+        success: false,
+        step: 'tables',
+        error: 'Database tables not properly configured',
+        solution: 'Please run the SQL migration in your Supabase dashboard',
+        needsManualSetup: true,
+        sqlToRun: `-- Run this SQL in your Supabase SQL Editor to fix the database setup
+
+-- Drop existing policies to avoid conflicts
+DROP POLICY IF EXISTS "Enable read access for all users" ON creators;
+DROP POLICY IF EXISTS "Enable insert for all users" ON creators;
+DROP POLICY IF EXISTS "Enable update for all users" ON creators;
+DROP POLICY IF EXISTS "Enable delete for all users" ON creators;
+
+-- Create tables if they don't exist
 CREATE TABLE IF NOT EXISTS creators (
   id BIGSERIAL PRIMARY KEY,
   name TEXT NOT NULL,
@@ -78,61 +79,29 @@ CREATE TABLE IF NOT EXISTS creators (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Create content table
-CREATE TABLE IF NOT EXISTS content (
-  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  name TEXT NOT NULL,
-  type TEXT NOT NULL,
-  category TEXT NOT NULL,
-  status TEXT DEFAULT 'draft',
-  creator_id BIGINT REFERENCES creators(id) ON DELETE SET NULL,
-  scheduled_date TIMESTAMPTZ,
-  posted_date TIMESTAMPTZ,
-  priority TEXT DEFAULT 'medium',
-  notes TEXT,
-  tags TEXT[] DEFAULT '{}',
-  description TEXT,
-  upload_date DATE DEFAULT CURRENT_DATE,
-  size BIGINT DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Enable Row Level Security
+-- Enable RLS
 ALTER TABLE creators ENABLE ROW LEVEL SECURITY;
-ALTER TABLE content ENABLE ROW LEVEL SECURITY;
 
--- Create policies for public access
-CREATE POLICY "Enable read access for all users" ON creators FOR SELECT USING (true);
-CREATE POLICY "Enable insert for all users" ON creators FOR INSERT WITH CHECK (true);
-CREATE POLICY "Enable update for all users" ON creators FOR UPDATE USING (true);
-CREATE POLICY "Enable delete for all users" ON creators FOR DELETE USING (true);
+-- Create new policies with unique names
+CREATE POLICY "creators_select_policy" ON creators FOR SELECT USING (true);
+CREATE POLICY "creators_insert_policy" ON creators FOR INSERT WITH CHECK (true);
+CREATE POLICY "creators_update_policy" ON creators FOR UPDATE USING (true);
+CREATE POLICY "creators_delete_policy" ON creators FOR DELETE USING (true);
 
-CREATE POLICY "Enable read access for all users" ON content FOR SELECT USING (true);
-CREATE POLICY "Enable insert for all users" ON content FOR INSERT WITH CHECK (true);
-CREATE POLICY "Enable update for all users" ON content FOR UPDATE USING (true);
-CREATE POLICY "Enable delete for all users" ON content FOR DELETE USING (true);
-          `
-        })
-      }
+-- Insert sample data
+INSERT INTO creators (name, email, category, phase, phase_number, cards_sold, card_price, avatar, bio)
+VALUES 
+  ('Kurama', 'kurama@example.com', 'Gaming', 'Phase 2: Launch Week', 2, 67, 100.00, '🎮', 'Top Smash Bros player'),
+  ('Nina Lin', 'nina@example.com', 'Streaming', 'Phase 1: Drop Prep', 1, 0, 75.00, '📺', 'Popular streamer'),
+  ('Edward So', 'edward@example.com', 'Music', 'Phase 3: Sell-Out Push', 3, 85, 90.00, '🎵', 'DJ and entrepreneur')
+ON CONFLICT (id) DO NOTHING;`
+      })
     }
 
     console.log('✅ Creators table accessible')
 
-    // Test 3: Check content table
-    const { data: contentTest, error: contentError } = await supabase
-      .from('content')
-      .select('count')
-      .limit(1)
-
-    if (contentError) {
-      console.log('⚠️ Content table not accessible:', contentError.message)
-    } else {
-      console.log('✅ Content table accessible')
-    }
-
-    // Test 4: Try to fetch existing data
-    console.log('Test 4: Fetching existing data...')
+    // Test 3: Try to fetch existing data
+    console.log('Test 3: Fetching existing data...')
     const { data: existingCreators, error: fetchError } = await supabase
       .from('creators')
       .select('id, name, category, cards_sold, card_price')
@@ -150,9 +119,9 @@ CREATE POLICY "Enable delete for all users" ON content FOR DELETE USING (true);
 
     console.log('✅ Data fetch successful:', existingCreators?.length || 0, 'creators found')
 
-    // Test 5: If no data exists, populate with sample data
+    // Test 4: If no data exists, try to insert sample data
     if (!existingCreators || existingCreators.length === 0) {
-      console.log('📊 No data found, populating with sample creators...')
+      console.log('📊 No data found, attempting to insert sample creators...')
       
       const sampleCreators = [
         {
@@ -250,15 +219,15 @@ CREATE POLICY "Enable delete for all users" ON content FOR DELETE USING (true);
           success: false,
           step: 'sample_data',
           error: `Failed to insert sample data: ${insertError.message}`,
-          solution: 'Check table permissions and try again'
+          solution: 'Check table permissions and try running the SQL migration manually'
         })
       }
 
       console.log('✅ Sample data inserted:', insertedCreators?.length || 0, 'creators')
     }
 
-    // Test 6: Final verification
-    console.log('Test 6: Final verification...')
+    // Test 5: Final verification
+    console.log('Test 5: Final verification...')
     const { data: finalCheck, error: finalError } = await supabase
       .from('creators')
       .select('id, name, category, cards_sold, card_price')
@@ -281,7 +250,7 @@ CREATE POLICY "Enable delete for all users" ON content FOR DELETE USING (true);
         creatorsCount: finalCheck?.length || 0,
         sampleCreators: finalCheck || [],
         connectionTime: new Date().toISOString(),
-        tablesVerified: ['creators', 'content'],
+        tablesVerified: ['creators'],
         rlsEnabled: true,
         sampleDataPopulated: !existingCreators || existingCreators.length === 0
       }

@@ -22,6 +22,7 @@ import Analytics from '@/components/Analytics'
 import CreatorManagement from '@/components/CreatorManagement'
 import AirtableIntegration from '@/components/AirtableIntegration'
 import ContentManager from '@/components/ContentManager'
+import ContentCalendar from '@/components/ContentCalendar'
 import StrategyGuide from '@/components/StrategyGuide'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 
@@ -275,10 +276,11 @@ export default function Dashboard() {
 
         {/* Main Content */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="pipeline">Creator Pipeline</TabsTrigger>
             <TabsTrigger value="creators">Creator Management</TabsTrigger>
             <TabsTrigger value="content">Content</TabsTrigger>
+            <TabsTrigger value="calendar">Calendar</TabsTrigger>
             <TabsTrigger value="strategy">Strategy Guide</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
             <TabsTrigger value="airtable">Airtable</TabsTrigger>
@@ -421,6 +423,14 @@ export default function Dashboard() {
 
           <TabsContent value="content">
             <ContentManager
+              creators={allCreators}
+              onContentUpdate={setAllContent}
+            />
+          </TabsContent>
+
+          <TabsContent value="calendar">
+            <ContentCalendar
+              content={allContent}
               creators={allCreators}
               onContentUpdate={setAllContent}
             />

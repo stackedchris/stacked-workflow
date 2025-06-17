@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Progress } from '@/components/ui/progress'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   Plus,
   Edit,
@@ -18,7 +19,10 @@ import {
   Target,
   Calendar,
   ChevronRight,
-  ChevronDown
+  ChevronDown,
+  AlertTriangle,
+  Zap,
+  Minus
 } from 'lucide-react'
 
 interface PhaseTask {
@@ -194,17 +198,19 @@ export default function PhaseManager({ creatorId, creatorName, currentPhase, onP
   }
 
   const deleteTask = (phaseId: number, taskId: string) => {
-    const updatedPhases = phases.map(phase => {
-      if (phase.id === phaseId) {
-        return {
-          ...phase,
-          tasks: phase.tasks.filter(task => task.id !== taskId)
+    if (confirm('Are you sure you want to delete this task?')) {
+      const updatedPhases = phases.map(phase => {
+        if (phase.id === phaseId) {
+          return {
+            ...phase,
+            tasks: phase.tasks.filter(task => task.id !== taskId)
+          }
         }
-      }
-      return phase
-    })
-    setPhases(updatedPhases)
-    onPhaseUpdate(updatedPhases)
+        return phase
+      })
+      setPhases(updatedPhases)
+      onPhaseUpdate(updatedPhases)
+    }
   }
 
   const getPhaseProgress = (phase: CreatorPhase) => {
@@ -215,10 +221,19 @@ export default function PhaseManager({ creatorId, creatorName, currentPhase, onP
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case 'high': return 'bg-red-100 text-red-800'
-      case 'medium': return 'bg-yellow-100 text-yellow-800'
-      case 'low': return 'bg-blue-100 text-blue-800'
-      default: return 'bg-gray-100 text-gray-800'
+      case 'high': return 'bg-red-100 text-red-800 border-red-200'
+      case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+      case 'low': return 'bg-blue-100 text-blue-800 border-blue-200'
+      default: return 'bg-gray-100 text-gray-800 border-gray-200'
+    }
+  }
+
+  const getPriorityIcon = (priority: string) => {
+    switch (priority) {
+      case 'high': return <AlertTriangle className="w-3 h-3" />
+      case 'medium': return <Zap className="w-3 h-3" />
+      case 'low': return <Minus className="w-3 h-3" />
+      default: return <Minus className="w-3 h-3" />
     }
   }
 
@@ -292,17 +307,70 @@ export default function PhaseManager({ creatorId, creatorName, currentPhase, onP
 
                         <div className="flex-1">
                           {editingTask === task.id ? (
-                            <div className="space-y-2">
+                            <div className="space-y-3">
                               <Input
                                 value={task.title}
                                 onChange={(e) => updateTask(phase.id, task.id, { title: e.target.value })}
                                 className="font-medium"
+                                placeholder="Task title"
                               />
                               <Textarea
                                 value={task.description}
                                 onChange={(e) => updateTask(phase.id, task.id, { description: e.target.value })}
                                 rows={2}
+                                placeholder="Task description"
                               />
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-sm font-medium mb-1">Priority</label>
+                                  <Select
+                                    value={task.priority}
+                                    onValueChange={(value: 'high' | 'medium' | 'low') => 
+                                      updateTask(phase.id, task.id, { priority: value })
+                                    }
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="high">
+                                        <div className="flex items-center space-x-2">
+                                          <AlertTriangle className="w-3 h-3 text-red-600" />
+                                          <span>High Priority</span>
+                                        </div>
+                                      </SelectItem>
+                                      <SelectItem value="medium">
+                                        <div className="flex items-center space-x-2">
+                                          <Zap className="w-3 h-3 text-yellow-600" />
+                                          <span>Medium Priority</span>
+                                        </div>
+                                      </SelectItem>
+                                      <SelectItem value="low">
+                                        <div className="flex items-center space-x-2">
+                                          <Minus className="w-3 h-3 text-blue-600" />
+                                          <span>Low Priority</span>
+                                        </div>
+                                      </SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium mb-1">Due Date</label>
+                                  <Input
+                                    type="date"
+                                    value={task.dueDate || ''}
+                                    onChange={(e) => updateTask(phase.id, task.id, { dueDate: e.target.value })}
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium mb-1">Assigned To</label>
+                                <Input
+                                  value={task.assignedTo || ''}
+                                  onChange={(e) => updateTask(phase.id, task.id, { assignedTo: e.target.value })}
+                                  placeholder="Team member or creator"
+                                />
+                              </div>
                               <div className="flex space-x-2">
                                 <Button size="sm" onClick={() => setEditingTask(null)}>
                                   <Save className="w-3 h-3 mr-1" />
@@ -321,8 +389,11 @@ export default function PhaseManager({ creatorId, creatorName, currentPhase, onP
                                   {task.title}
                                 </h4>
                                 <div className="flex items-center space-x-2">
-                                  <Badge className={getPriorityColor(task.priority)}>
-                                    {task.priority}
+                                  <Badge className={`text-xs border ${getPriorityColor(task.priority)}`}>
+                                    <div className="flex items-center space-x-1">
+                                      {getPriorityIcon(task.priority)}
+                                      <span className="capitalize">{task.priority}</span>
+                                    </div>
                                   </Badge>
                                   <Button
                                     size="sm"
@@ -336,6 +407,22 @@ export default function PhaseManager({ creatorId, creatorName, currentPhase, onP
                               <p className={`text-sm mt-1 ${task.completed ? 'line-through text-gray-400' : 'text-gray-600'}`}>
                                 {task.description}
                               </p>
+                              {(task.dueDate || task.assignedTo) && (
+                                <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
+                                  {task.dueDate && (
+                                    <div className="flex items-center space-x-1">
+                                      <Calendar className="w-3 h-3" />
+                                      <span>Due: {new Date(task.dueDate).toLocaleDateString()}</span>
+                                    </div>
+                                  )}
+                                  {task.assignedTo && (
+                                    <div className="flex items-center space-x-1">
+                                      <Target className="w-3 h-3" />
+                                      <span>Assigned: {task.assignedTo}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>

@@ -1,3 +1,4 @@
+// Update the main dashboard to use cloud storage
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -19,7 +20,11 @@ import {
   DollarSign,
   MessageSquare,
   Copy,
-  Eye
+  Eye,
+  Wifi,
+  WifiOff,
+  Cloud,
+  CloudOff
 } from 'lucide-react'
 import Analytics from '@/components/Analytics'
 import CreatorManagement from '@/components/CreatorManagement'
@@ -29,116 +34,8 @@ import ContentCalendar from '@/components/ContentCalendar'
 import StrategyGuide from '@/components/StrategyGuide'
 import EmployeeManagement from '@/components/EmployeeManagement'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
+import { useCloudCreators, useCloudContent } from '@/hooks/useCloudStorage'
 import { useToast } from '@/components/ui/toast'
-
-// Mock data for creators - Updated with full creator objects for testing
-const creators = [
-  {
-    id: 1,
-    name: "Kurama",
-    email: "kurama@example.com",
-    phone: "+1 (555) 123-4567",
-    category: "Gaming",
-    region: "US",
-    phase: "Phase 2: Launch Week",
-    phaseNumber: 2,
-    cardsSold: 67,
-    totalCards: 100,
-    cardPrice: 100,
-    daysInPhase: 2,
-    nextTask: "Post group chat screenshot",
-    salesVelocity: "High",
-    avatar: "🎮",
-    bio: "Top Smash Bros player with 500K+ following",
-    socialMedia: {
-      instagram: "@kurama_smash",
-      twitter: "@KuramaPlays",
-      youtube: "@KuramaGaming",
-      tiktok: "@kurama.gaming"
-    },
-    assets: { profileImages: [], videos: [], pressKit: [] },
-    strategy: {
-      launchDate: "2025-06-20",
-      targetAudience: "Competitive gaming fans",
-      contentPlan: "Daily gameplay tips"
-    },
-    stackedProfileUrl: "https://stacked.com/kurama",
-    createdAt: "2025-06-10",
-    lastUpdated: "2025-06-16"
-  },
-  {
-    id: 2,
-    name: "Nina Lin",
-    email: "nina@example.com",
-    phone: "+1 (555) 234-5678",
-    category: "Streaming",
-    region: "US",
-    phase: "Phase 1: Drop Prep",
-    phaseNumber: 1,
-    cardsSold: 0,
-    totalCards: 100,
-    cardPrice: 75,
-    daysInPhase: 5,
-    nextTask: "Record teaser video",
-    salesVelocity: "Pending",
-    avatar: "📺",
-    bio: "Popular streamer and co-founder",
-    socialMedia: {
-      instagram: "@ninalin",
-      twitter: "@NinaStreams",
-      tiktok: "@nina.streams"
-    },
-    assets: { profileImages: [], videos: [], pressKit: [] },
-    strategy: {
-      launchDate: "2025-06-25",
-      targetAudience: "Streaming community",
-      contentPlan: "Stream highlights"
-    },
-    stackedProfileUrl: "https://stacked.com/nina-lin",
-    createdAt: "2025-06-12",
-    lastUpdated: "2025-06-16"
-  },
-  {
-    id: 3,
-    name: "Edward So",
-    email: "edward@example.com",
-    phone: "+1 (555) 345-6789",
-    category: "Music",
-    region: "Brazil",
-    phase: "Phase 3: Sell-Out Push",
-    phaseNumber: 3,
-    cardsSold: 85,
-    totalCards: 100,
-    cardPrice: 90,
-    daysInPhase: 1,
-    nextTask: "Post 'only 15 left' story",
-    salesVelocity: "Medium",
-    avatar: "🎵",
-    bio: "DJ and creative entrepreneur",
-    socialMedia: {
-      instagram: "@edwardso",
-      twitter: "@EdwardSoMusic",
-      tiktok: "@edward.djmusic"
-    },
-    assets: { profileImages: [], videos: [], pressKit: [] },
-    strategy: {
-      launchDate: "2025-06-18",
-      targetAudience: "Music fans",
-      contentPlan: "Live sets and remixes"
-    },
-    stackedProfileUrl: "https://stacked.com/edward-so",
-    createdAt: "2025-06-08",
-    lastUpdated: "2025-06-16"
-  }
-]
-
-const phases = [
-  { name: "Strategy Call", color: "bg-blue-500" },
-  { name: "Drop Prep", color: "bg-yellow-500" },
-  { name: "Launch Week", color: "bg-green-500" },
-  { name: "Sell-Out Push", color: "bg-orange-500" },
-  { name: "Post-Sellout", color: "bg-purple-500" }
-]
 
 // Phase-specific task sequences
 const phaseTaskSequences = {
@@ -240,10 +137,22 @@ const getFirstTaskForPhase = (phaseNumber: number) => {
 }
 
 export default function Dashboard() {
-  // Use localStorage to persist data across page refreshes
-  const [allCreators, setAllCreators, isCreatorsHydrated] = useLocalStorage('stacked-creators', creators)
-  const [allContent, setAllContent] = useLocalStorage('stacked-content', [])
-  const [selectedCreator, setSelectedCreator] = useState(creators[0])
+  // Use cloud storage hooks instead of localStorage
+  const { 
+    creators: allCreators, 
+    isLoading: creatorsLoading, 
+    isOnline: creatorsOnline,
+    updateCreator: updateCreatorInCloud 
+  } = useCloudCreators()
+  
+  const { 
+    content: allContent, 
+    isLoading: contentLoading, 
+    isOnline: contentOnline,
+    updateContent: updateContentInCloud 
+  } = useCloudContent()
+
+  const [selectedCreator, setSelectedCreator] = useState(allCreators[0])
   const [showAddCreator, setShowAddCreator] = useState(false)
   const [activeTab, setActiveTab, isTabHydrated] = useLocalStorage('stacked-active-tab', "pipeline")
   const [isAutoSyncing, setIsAutoSyncing] = useState(false)
@@ -252,7 +161,7 @@ export default function Dashboard() {
 
   // Update selected creator when allCreators changes or hydrates
   useEffect(() => {
-    if (isCreatorsHydrated && allCreators.length > 0) {
+    if (!creatorsLoading && allCreators.length > 0) {
       if (!selectedCreator || !allCreators.find(c => c.id === selectedCreator.id)) {
         setSelectedCreator(allCreators[0])
       } else {
@@ -263,7 +172,7 @@ export default function Dashboard() {
         }
       }
     }
-  }, [allCreators, selectedCreator, isCreatorsHydrated])
+  }, [allCreators, selectedCreator, creatorsLoading])
 
   // Auto-sync to Airtable every 5 minutes
   useEffect(() => {
@@ -287,7 +196,7 @@ export default function Dashboard() {
   }, [allCreators, setLastSyncTime])
 
   // Handle marking task as complete with proper phase alignment and confirmation
-  const handleMarkTaskComplete = (creatorId: number) => {
+  const handleMarkTaskComplete = async (creatorId: number) => {
     const creator = allCreators.find(c => c.id === creatorId)
     if (!creator) return
 
@@ -297,49 +206,41 @@ export default function Dashboard() {
       return
     }
 
-    const updatedCreators = allCreators.map(c => {
-      if (c.id === creatorId) {
-        let newPhaseNumber = c.phaseNumber
-        let newPhase = c.phase
-        let newNextTask = c.nextTask
-        let newDaysInPhase = c.daysInPhase
+    let newPhaseNumber = creator.phaseNumber
+    let newPhase = creator.phase
+    let newNextTask = creator.nextTask
+    let newDaysInPhase = creator.daysInPhase
 
-        // Check if should progress to next phase
-        if (shouldProgressPhase(c)) {
-          // Progress to next phase
-          newPhaseNumber = Math.min(c.phaseNumber + 1, 4)
-          newPhase = `Phase ${newPhaseNumber}: ${phases[newPhaseNumber]?.name || 'Complete'}`
-          newNextTask = getFirstTaskForPhase(newPhaseNumber)
-          newDaysInPhase = 0
-        } else {
-          // Stay in current phase, move to next task
-          newNextTask = getNextTaskInPhase(c.nextTask, c.phaseNumber)
-          newDaysInPhase = c.daysInPhase
-        }
+    // Check if should progress to next phase
+    if (shouldProgressPhase(creator)) {
+      // Progress to next phase
+      newPhaseNumber = Math.min(creator.phaseNumber + 1, 4)
+      newPhase = `Phase ${newPhaseNumber}: ${["Strategy Call", "Drop Prep", "Launch Week", "Sell-Out Push", "Post-Sellout"][newPhaseNumber]}`
+      newNextTask = getFirstTaskForPhase(newPhaseNumber)
+      newDaysInPhase = 0
+    } else {
+      // Stay in current phase, move to next task
+      newNextTask = getNextTaskInPhase(creator.nextTask, creator.phaseNumber)
+      newDaysInPhase = creator.daysInPhase
+    }
 
-        return {
-          ...c,
-          phaseNumber: newPhaseNumber,
-          phase: newPhase,
-          nextTask: newNextTask,
-          daysInPhase: newDaysInPhase,
-          lastUpdated: new Date().toISOString().split('T')[0]
-        }
-      }
-      return c
-    })
+    const updates = {
+      phaseNumber: newPhaseNumber,
+      phase: newPhase,
+      nextTask: newNextTask,
+      daysInPhase: newDaysInPhase,
+      lastUpdated: new Date().toISOString().split('T')[0]
+    }
 
-    setAllCreators(updatedCreators)
+    // Update in cloud
+    await updateCreatorInCloud(creatorId, updates)
     
     // Show success message with context
-    const updatedCreator = updatedCreators.find(c => c.id === creatorId)
-    if (updatedCreator) {
-      const wasProgressed = updatedCreator.phaseNumber > creator.phaseNumber
-      if (wasProgressed) {
-        success(`${creator.name} progressed to ${updatedCreator.phase}!`, `Next: ${updatedCreator.nextTask}`)
-      } else {
-        success(`Task completed for ${creator.name}`, `Next: ${updatedCreator.nextTask}`)
-      }
+    const wasProgressed = newPhaseNumber > creator.phaseNumber
+    if (wasProgressed) {
+      success(`${creator.name} progressed to ${newPhase}!`, `Next: ${newNextTask}`)
+    } else {
+      success(`Task completed for ${creator.name}`, `Next: ${newNextTask}`)
     }
   }
 
@@ -372,6 +273,19 @@ export default function Dashboard() {
     creator.salesVelocity === 'Low' || creator.daysInPhase > 7
   ).length
 
+  // Show loading state
+  if (creatorsLoading || contentLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4" />
+          <p className="text-gray-600">Loading Stacked Workflow...</p>
+          <p className="text-sm text-gray-500 mt-2">Syncing data from cloud...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto space-y-8">
@@ -380,12 +294,35 @@ export default function Dashboard() {
           <div>
             <h1 className="text-4xl font-bold text-gray-900">Stacked Creator Pipeline</h1>
             <p className="text-gray-600 mt-2">Creator pipeline management & automation platform</p>
-            {lastSyncTime && (
-              <div className="flex items-center mt-1 text-sm text-gray-500">
-                <div className={`w-2 h-2 rounded-full mr-2 ${isAutoSyncing ? 'bg-yellow-400 animate-pulse' : 'bg-green-400'}`} />
-                {isAutoSyncing ? 'Syncing...' : `Last synced: ${lastSyncTime}`}
+            <div className="flex items-center mt-2 space-x-4">
+              {/* Cloud Status Indicators */}
+              <div className="flex items-center space-x-1">
+                {creatorsOnline ? (
+                  <Cloud className="w-4 h-4 text-green-500" />
+                ) : (
+                  <CloudOff className="w-4 h-4 text-red-500" />
+                )}
+                <span className={`text-sm ${creatorsOnline ? 'text-green-600' : 'text-red-600'}`}>
+                  Creators {creatorsOnline ? 'Online' : 'Offline'}
+                </span>
               </div>
-            )}
+              <div className="flex items-center space-x-1">
+                {contentOnline ? (
+                  <Cloud className="w-4 h-4 text-green-500" />
+                ) : (
+                  <CloudOff className="w-4 h-4 text-red-500" />
+                )}
+                <span className={`text-sm ${contentOnline ? 'text-green-600' : 'text-red-600'}`}>
+                  Content {contentOnline ? 'Online' : 'Offline'}
+                </span>
+              </div>
+              {lastSyncTime && (
+                <div className="flex items-center text-sm text-gray-500">
+                  <div className={`w-2 h-2 rounded-full mr-2 ${isAutoSyncing ? 'bg-yellow-400 animate-pulse' : 'bg-green-400'}`} />
+                  {isAutoSyncing ? 'Syncing...' : `Last synced: ${lastSyncTime}`}
+                </div>
+              )}
+            </div>
           </div>
           <Button
             className="bg-black text-white hover:bg-gray-800"
@@ -411,7 +348,7 @@ export default function Dashboard() {
             <CardContent>
               <div className="text-2xl font-bold">{allCreators.length}</div>
               <p className="text-xs text-muted-foreground">
-                +2 from last week
+                {creatorsOnline ? 'Synced to cloud' : 'Local only'}
               </p>
             </CardContent>
           </Card>
@@ -485,7 +422,7 @@ export default function Dashboard() {
                       <div
                         key={creator.id}
                         className={`p-4 border rounded-lg cursor-pointer transition-colors ${
-                          selectedCreator.id === creator.id
+                          selectedCreator?.id === creator.id
                             ? 'border-black bg-gray-50'
                             : 'border-gray-200 hover:border-gray-300'
                         }`}
@@ -537,95 +474,104 @@ export default function Dashboard() {
 
               {/* Creator Detail */}
               <div>
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center space-x-2">
-                      <span className="text-2xl">{selectedCreator.avatar}</span>
-                      <span>{selectedCreator.name}</span>
-                    </CardTitle>
-                    <CardDescription className="flex items-center space-x-2">
-                      <span>{selectedCreator.category}</span>
-                      <Badge variant="outline" className="text-xs">
-                        {selectedCreator.region}
-                      </Badge>
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <h4 className="font-medium mb-2">Current Phase</h4>
-                      <Badge
-                        className={`bg-${getPhaseColor(selectedCreator.phaseNumber)}-100 text-${getPhaseColor(selectedCreator.phaseNumber)}-800`}
-                      >
-                        {selectedCreator.phase}
-                      </Badge>
-                      <p className="text-sm text-gray-600 mt-1">
-                        Day {selectedCreator.daysInPhase} in phase
-                      </p>
-                    </div>
-
-                    <div>
-                      <h4 className="font-medium mb-2">Progress</h4>
-                      <Progress value={selectedCreator.cardsSold} className="h-3" />
-                      <p className="text-sm text-gray-600 mt-1">
-                        {selectedCreator.cardsSold}/100 cards sold ({(selectedCreator.cardsSold/100*100).toFixed(0)}%)
-                      </p>
-                    </div>
-
-                    <div>
-                      <h4 className="font-medium mb-2">Current Task</h4>
-                      <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                        <p className="text-sm font-medium">{selectedCreator.nextTask}</p>
-                        <p className="text-xs text-gray-600 mt-1">
-                          Phase {selectedCreator.phaseNumber} • {selectedCreator.phase}
+                {selectedCreator ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center space-x-2">
+                        <span className="text-2xl">{selectedCreator.avatar}</span>
+                        <span>{selectedCreator.name}</span>
+                      </CardTitle>
+                      <CardDescription className="flex items-center space-x-2">
+                        <span>{selectedCreator.category}</span>
+                        <Badge variant="outline" className="text-xs">
+                          {selectedCreator.region}
+                        </Badge>
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <h4 className="font-medium mb-2">Current Phase</h4>
+                        <Badge
+                          className={`bg-${getPhaseColor(selectedCreator.phaseNumber)}-100 text-${getPhaseColor(selectedCreator.phaseNumber)}-800`}
+                        >
+                          {selectedCreator.phase}
+                        </Badge>
+                        <p className="text-sm text-gray-600 mt-1">
+                          Day {selectedCreator.daysInPhase} in phase
                         </p>
-                        <Button 
-                          size="sm" 
-                          className="mt-2"
-                          onClick={() => handleMarkTaskComplete(selectedCreator.id)}
-                        >
-                          <CheckCircle2 className="w-3 h-3 mr-1" />
-                          Mark Complete
-                        </Button>
                       </div>
-                    </div>
 
-                    <div>
-                      <h4 className="font-medium mb-2">Quick Actions</h4>
-                      <div className="space-y-2">
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          className="w-full justify-start"
-                          onClick={() => handleCopyContentPrompt(selectedCreator)}
-                        >
-                          <MessageSquare className="w-3 h-3 mr-2" />
-                          Copy Content Prompt
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          className="w-full justify-start"
-                          onClick={() => handleViewAnalytics(selectedCreator)}
-                        >
-                          <BarChart3 className="w-3 h-3 mr-2" />
-                          View Analytics
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          className="w-full justify-start"
-                          onClick={() => {
-                            setActiveTab("strategy")
-                            // Could also set selected creator in strategy guide
-                          }}
-                        >
-                          <Target className="w-3 h-3 mr-2" />
-                          View Strategy Guide
-                        </Button>
+                      <div>
+                        <h4 className="font-medium mb-2">Progress</h4>
+                        <Progress value={selectedCreator.cardsSold} className="h-3" />
+                        <p className="text-sm text-gray-600 mt-1">
+                          {selectedCreator.cardsSold}/100 cards sold ({(selectedCreator.cardsSold/100*100).toFixed(0)}%)
+                        </p>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
+
+                      <div>
+                        <h4 className="font-medium mb-2">Current Task</h4>
+                        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                          <p className="text-sm font-medium">{selectedCreator.nextTask}</p>
+                          <p className="text-xs text-gray-600 mt-1">
+                            Phase {selectedCreator.phaseNumber} • {selectedCreator.phase}
+                          </p>
+                          <Button 
+                            size="sm" 
+                            className="mt-2"
+                            onClick={() => handleMarkTaskComplete(selectedCreator.id)}
+                          >
+                            <CheckCircle2 className="w-3 h-3 mr-1" />
+                            Mark Complete
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <h4 className="font-medium mb-2">Quick Actions</h4>
+                        <div className="space-y-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="w-full justify-start"
+                            onClick={() => handleCopyContentPrompt(selectedCreator)}
+                          >
+                            <MessageSquare className="w-3 h-3 mr-2" />
+                            Copy Content Prompt
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="w-full justify-start"
+                            onClick={() => handleViewAnalytics(selectedCreator)}
+                          >
+                            <BarChart3 className="w-3 h-3 mr-2" />
+                            View Analytics
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="w-full justify-start"
+                            onClick={() => {
+                              setActiveTab("strategy")
+                              // Could also set selected creator in strategy guide
+                            }}
+                          >
+                            <Target className="w-3 h-3 mr-2" />
+                            View Strategy Guide
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card>
+                    <CardContent className="text-center py-12">
+                      <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                      <p className="text-gray-500">Select a creator to view details</p>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             </div>
           </TabsContent>
@@ -633,7 +579,7 @@ export default function Dashboard() {
           <TabsContent value="creators">
             <CreatorManagement
               creators={allCreators}
-              onCreatorsUpdate={setAllCreators}
+              onCreatorsUpdate={() => {}} // Cloud hook handles updates automatically
               showAddCreator={showAddCreator}
               onAddCreatorClose={() => setShowAddCreator(false)}
             />
@@ -642,7 +588,7 @@ export default function Dashboard() {
           <TabsContent value="content">
             <ContentManager
               creators={allCreators}
-              onContentUpdate={setAllContent}
+              onContentUpdate={() => {}} // Cloud hook handles updates automatically
             />
           </TabsContent>
 
@@ -650,7 +596,7 @@ export default function Dashboard() {
             <ContentCalendar
               content={allContent}
               creators={allCreators}
-              onContentUpdate={setAllContent}
+              onContentUpdate={() => {}} // Cloud hook handles updates automatically
             />
           </TabsContent>
 
@@ -665,7 +611,7 @@ export default function Dashboard() {
           <TabsContent value="employees">
             <EmployeeManagement 
               creators={allCreators} 
-              onCreatorsUpdate={setAllCreators}
+              onCreatorsUpdate={() => {}} // Cloud hook handles updates automatically
             />
           </TabsContent>
 

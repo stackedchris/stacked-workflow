@@ -23,10 +23,12 @@ import {
   Table,
   Copy,
   Plus,
-  Zap
+  Zap,
+  Cloud
 } from 'lucide-react'
 import { AirtableService } from '@/lib/airtable'
 import { useToast } from '@/components/ui/toast'
+import { FirebaseStatus } from '@/components/FirebaseStatus'
 
 interface AirtableConfig {
   apiKey: string
@@ -70,6 +72,7 @@ export default function AirtableIntegration({
   const [isCreatingBase, setIsCreatingBase] = useState(false)
   const [workspaceName, setWorkspaceName] = useState('')
   const [baseName, setBaseName] = useState('Stacked Creator Pipeline')
+  const [activeTab, setActiveTab] = useState('setup')
   const { success, error } = useToast()
 
   // Auto-sync when enabled and data changes
@@ -392,8 +395,8 @@ export default function AirtableIntegration({
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold">Airtable Integration</h2>
-          <p className="text-gray-600">Automatic sync with Airtable database</p>
+          <h2 className="text-2xl font-bold">Integrations</h2>
+          <p className="text-gray-600">Connect your workflow to external services</p>
         </div>
         <div className="flex items-center space-x-3">
           {autoSync && config.isConnected && (
@@ -405,7 +408,7 @@ export default function AirtableIntegration({
           {config.isConnected && (
             <Badge className="bg-green-100 text-green-800">
               <CheckCircle2 className="w-3 h-3 mr-1" />
-              Connected
+              Airtable Connected
             </Badge>
           )}
         </div>
@@ -454,12 +457,13 @@ export default function AirtableIntegration({
         </Card>
       )}
 
-      <Tabs defaultValue={config.isConnected ? "sync" : "setup"} className="space-y-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList>
-          <TabsTrigger value="setup">Setup</TabsTrigger>
+          <TabsTrigger value="setup">Airtable Setup</TabsTrigger>
           <TabsTrigger value="sync">Sync Data</TabsTrigger>
           <TabsTrigger value="export">Export/Import</TabsTrigger>
           <TabsTrigger value="template">Template</TabsTrigger>
+          <TabsTrigger value="admin">Admin</TabsTrigger>
         </TabsList>
 
         <TabsContent value="setup">
@@ -930,6 +934,131 @@ export default function AirtableIntegration({
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="admin">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Cloud className="w-5 h-5 mr-2" />
+                  Firebase Integration
+                </CardTitle>
+                <CardDescription>
+                  Real-time database with team sync capabilities
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <FirebaseStatus />
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => window.location.href = '/firebase-setup'}
+                  >
+                    <Cloud className="w-4 h-4 mr-2" />
+                    Setup Firebase
+                  </Button>
+                </div>
+                
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <h4 className="font-medium text-blue-900 mb-2">Why Use Firebase?</h4>
+                  <ul className="text-sm text-blue-800 space-y-1">
+                    <li>• Real-time sync across all team members</li>
+                    <li>• No SQL migrations or schema conflicts</li>
+                    <li>• Built-in authentication system</li>
+                    <li>• Generous free tier (50K reads/day)</li>
+                    <li>• 5-minute setup with zero headaches</li>
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Database className="w-5 h-5 mr-2" />
+                  Storage Options
+                </CardTitle>
+                <CardDescription>
+                  Alternative storage solutions for your data
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-medium">Current Storage</h4>
+                    <p className="text-sm text-gray-600">Using browser local storage</p>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => window.location.href = '/storage-setup'}
+                  >
+                    <Settings className="w-4 h-4 mr-2" />
+                    Storage Options
+                  </Button>
+                </div>
+                
+                <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                  <h4 className="font-medium text-green-900 mb-2">Available Options:</h4>
+                  <ul className="text-sm text-green-800 space-y-1">
+                    <li>• Enhanced Local Storage (current) - Works immediately</li>
+                    <li>• Firebase Firestore - Real-time team sync</li>
+                    <li>• Airtable as Database - Visual interface</li>
+                    <li>• PlanetScale MySQL - Serverless SQL</li>
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card className="md:col-span-2">
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Settings className="w-5 h-5 mr-2" />
+                  Advanced Settings
+                </CardTitle>
+                <CardDescription>
+                  Configure advanced platform settings
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-3 border rounded-lg">
+                    <div>
+                      <h4 className="font-medium">Data Export</h4>
+                      <p className="text-sm text-gray-600">Export all platform data</p>
+                    </div>
+                    <Button variant="outline" size="sm">
+                      <Download className="w-4 h-4 mr-2" />
+                      Export All Data
+                    </Button>
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-3 border rounded-lg">
+                    <div>
+                      <h4 className="font-medium">Team Sharing</h4>
+                      <p className="text-sm text-gray-600">Share data with team members</p>
+                    </div>
+                    <Button variant="outline" size="sm">
+                      <Users className="w-4 h-4 mr-2" />
+                      Team Sharing
+                    </Button>
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-3 border rounded-lg">
+                    <div>
+                      <h4 className="font-medium">Reset Application</h4>
+                      <p className="text-sm text-gray-600">Clear all data and start fresh</p>
+                    </div>
+                    <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700">
+                      Reset App
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </div>

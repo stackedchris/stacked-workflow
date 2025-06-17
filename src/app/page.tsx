@@ -21,10 +21,7 @@ import {
   Copy,
   Eye,
   Wifi,
-  WifiOff,
-  Database,
-  ExternalLink,
-  Cloud
+  WifiOff
 } from 'lucide-react'
 import Analytics from '@/components/Analytics'
 import CreatorManagement from '@/components/CreatorManagement'
@@ -35,8 +32,6 @@ import StrategyGuide from '@/components/StrategyGuide'
 import EmployeeManagement from '@/components/EmployeeManagement'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { useToast } from '@/components/ui/toast'
-import { testSupabaseConnection } from '@/lib/supabase'
-import { FirebaseStatus } from '@/components/FirebaseStatus'
 
 // Mock data for creators - Updated with full creator objects for testing
 const creators = [
@@ -256,7 +251,6 @@ export default function Dashboard() {
   const [isAutoSyncing, setIsAutoSyncing] = useState(false)
   const [lastSyncTime, setLastSyncTime, isSyncTimeHydrated] = useLocalStorage('stacked-last-sync', '')
   const [connectionStatus, setConnectionStatus] = useState<'checking' | 'online' | 'offline'>('checking')
-  const [supabaseStatus, setSupabaseStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking')
   const { success, error } = useToast()
 
   // Check connection status on mount
@@ -306,27 +300,6 @@ export default function Dashboard() {
       window.removeEventListener('offline', handleOffline)
     }
   }, [success, error])
-
-  // Check Supabase connection on mount
-  useEffect(() => {
-    const checkSupabase = async () => {
-      try {
-        const result = await testSupabaseConnection()
-        setSupabaseStatus(result.success ? 'connected' : 'disconnected')
-        
-        if (result.success) {
-          console.log('✅ Supabase connection verified')
-        } else {
-          console.error('❌ Supabase connection failed:', result.error)
-        }
-      } catch (err) {
-        console.error('❌ Error checking Supabase:', err)
-        setSupabaseStatus('disconnected')
-      }
-    }
-    
-    checkSupabase()
-  }, [])
 
   // Update selected creator when allCreators changes or hydrates
   useEffect(() => {
@@ -486,38 +459,6 @@ export default function Dashboard() {
                 </span>
               </div>
               
-              {/* Firebase Status */}
-              <FirebaseStatus />
-              
-              {/* Supabase Status */}
-              <div className="flex items-center space-x-2">
-                {supabaseStatus === 'connected' ? (
-                  <Database className="w-4 h-4 text-green-500" />
-                ) : supabaseStatus === 'disconnected' ? (
-                  <Database className="w-4 h-4 text-red-500" />
-                ) : (
-                  <div className="w-4 h-4 bg-yellow-400 rounded-full animate-pulse" />
-                )}
-                <span className={`text-sm ${
-                  supabaseStatus === 'connected' ? 'text-green-600' : 
-                  supabaseStatus === 'disconnected' ? 'text-red-600' : 'text-yellow-600'
-                }`}>
-                  {supabaseStatus === 'connected' ? 'Supabase Connected' : 
-                   supabaseStatus === 'disconnected' ? 'Supabase Disconnected' : 'Checking Supabase...'}
-                </span>
-                {supabaseStatus === 'disconnected' && (
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="h-6 px-2 text-xs"
-                    onClick={() => window.location.href = '/firebase-setup'}
-                  >
-                    <Cloud className="w-3 h-3 mr-1" />
-                    Use Firebase
-                  </Button>
-                )}
-              </div>
-              
               {/* Sync Status */}
               {lastSyncTime && (
                 <div className="flex items-center text-sm text-gray-500">
@@ -606,7 +547,7 @@ export default function Dashboard() {
             <TabsTrigger value="strategy">Strategy Guide</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
             <TabsTrigger value="employees">Team</TabsTrigger>
-            <TabsTrigger value="airtable">Airtable</TabsTrigger>
+            <TabsTrigger value="airtable">Integrations</TabsTrigger>
           </TabsList>
 
           <TabsContent value="pipeline">

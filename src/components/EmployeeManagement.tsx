@@ -206,10 +206,10 @@ export default function EmployeeManagement({ creators = [], onCreatorsUpdate }: 
     }
   }
 
-  const assignCreatorToEmployee = (creatorId: number, employeeId: number) => {
+  const assignCreatorToEmployee = (creatorId: number, employeeId: number | null) => {
     // Update employee's assigned creators
     const updatedEmployees = employees.map(employee => {
-      if (employee.id === employeeId) {
+      if (employeeId && employee.id === employeeId) {
         const assignedCreators = employee.assignedCreators.includes(creatorId)
           ? employee.assignedCreators.filter(id => id !== creatorId)
           : [...employee.assignedCreators, creatorId]
@@ -227,7 +227,7 @@ export default function EmployeeManagement({ creators = [], onCreatorsUpdate }: 
     if (onCreatorsUpdate) {
       const updatedCreators = creators.map(creator =>
         creator.id === creatorId
-          ? { ...creator, assignedEmployee: employeeId }
+          ? { ...creator, assignedEmployee: employeeId || undefined }
           : creator
       )
       onCreatorsUpdate(updatedCreators)
@@ -840,9 +840,11 @@ export default function EmployeeManagement({ creators = [], onCreatorsUpdate }: 
                             </Badge>
                           )}
                           <Select
-                            value={assignedEmployee?.id.toString() || ''}
+                            value={assignedEmployee?.id.toString() || 'unassigned'}
                             onValueChange={(value) => {
-                              if (value) {
+                              if (value === 'unassigned') {
+                                assignCreatorToEmployee(creator.id, null)
+                              } else {
                                 assignCreatorToEmployee(creator.id, Number(value))
                               }
                             }}
@@ -851,7 +853,7 @@ export default function EmployeeManagement({ creators = [], onCreatorsUpdate }: 
                               <SelectValue placeholder="Assign to employee" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="">Unassigned</SelectItem>
+                              <SelectItem value="unassigned">Unassigned</SelectItem>
                               {employees.filter(emp => emp.status === 'active').map((employee) => (
                                 <SelectItem key={employee.id} value={employee.id.toString()}>
                                   {employee.name} - {employee.role}

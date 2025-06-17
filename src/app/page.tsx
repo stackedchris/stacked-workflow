@@ -132,6 +132,45 @@ const phases = [
   { name: "Post-Sellout", color: "bg-purple-500" }
 ]
 
+// Phase-specific task sequences
+const phaseTaskSequences = {
+  0: [ // Phase 0: Strategy Call
+    "Schedule strategy call",
+    "Complete strategy call",
+    "Define target audience",
+    "Set pricing strategy",
+    "Plan content calendar"
+  ],
+  1: [ // Phase 1: Drop Prep
+    "Record teaser video",
+    "Create launch assets",
+    "Set up tracking systems",
+    "Schedule content calendar",
+    "Prepare for launch"
+  ],
+  2: [ // Phase 2: Launch Week
+    "Post launch announcement",
+    "Post group chat screenshot",
+    "Share behind-the-scenes content",
+    "Monitor sales progress",
+    "Engage with community"
+  ],
+  3: [ // Phase 3: Sell-Out Push
+    "Post 'only 15 left' story",
+    "Create urgency content",
+    "Share social proof",
+    "Final push campaign",
+    "Last chance messaging"
+  ],
+  4: [ // Phase 4: Post-Sellout
+    "Send thank you message",
+    "Deliver exclusive content",
+    "Gather feedback",
+    "Plan next campaign",
+    "Campaign complete"
+  ]
+}
+
 const getPhaseColor = (phaseNumber: number) => {
   const colors = ["blue", "yellow", "green", "orange", "purple"]
   return colors[phaseNumber] || "gray"
@@ -146,16 +185,50 @@ const getSalesVelocityColor = (velocity: string) => {
   }
 }
 
-// Get next task for phase progression
-const getNextTaskForPhase = (phaseNumber: number) => {
-  const nextTasks = [
-    "Schedule strategy call",
-    "Record teaser video", 
-    "Post launch announcement",
-    "Create urgency content",
-    "Send thank you message"
-  ]
-  return nextTasks[phaseNumber] || "Complete phase"
+// Get next task in sequence for current phase
+const getNextTaskInPhase = (currentTask: string, phaseNumber: number) => {
+  const tasks = phaseTaskSequences[phaseNumber as keyof typeof phaseTaskSequences] || []
+  const currentIndex = tasks.indexOf(currentTask)
+  
+  if (currentIndex === -1) {
+    // If current task not found, return first task of phase
+    return tasks[0] || "Complete phase tasks"
+  }
+  
+  if (currentIndex < tasks.length - 1) {
+    // Return next task in sequence
+    return tasks[currentIndex + 1]
+  }
+  
+  // If at end of phase tasks, ready to progress
+  return "Ready for next phase"
+}
+
+// Check if creator should progress to next phase
+const shouldProgressPhase = (creator: any) => {
+  const { phaseNumber, cardsSold, nextTask } = creator
+  
+  // Phase progression logic
+  switch (phaseNumber) {
+    case 0: // Strategy Call -> Drop Prep
+      return nextTask === "Ready for next phase" || nextTask === "Plan content calendar"
+    case 1: // Drop Prep -> Launch Week  
+      return (nextTask === "Ready for next phase" || nextTask === "Prepare for launch") && cardsSold >= 0
+    case 2: // Launch Week -> Sell-Out Push
+      return cardsSold >= 50 || nextTask === "Ready for next phase"
+    case 3: // Sell-Out Push -> Post-Sellout
+      return cardsSold >= 100 || nextTask === "Ready for next phase"
+    case 4: // Already at final phase
+      return false
+    default:
+      return false
+  }
+}
+
+// Get first task for a phase
+const getFirstTaskForPhase = (phaseNumber: number) => {
+  const tasks = phaseTaskSequences[phaseNumber as keyof typeof phaseTaskSequences] || []
+  return tasks[0] || "Complete phase"
 }
 
 export default function Dashboard() {
@@ -204,54 +277,54 @@ export default function Dashboard() {
     return () => clearInterval(autoSync)
   }, [allCreators, setLastSyncTime])
 
-  // Handle marking task as complete
+  // Handle marking task as complete with proper phase alignment
   const handleMarkTaskComplete = (creatorId: number) => {
-    const updatedCreators = allCreators.map(creator => {
-      if (creator.id === creatorId) {
-        // Move to next phase if appropriate, or update next task
-        let newPhaseNumber = creator.phaseNumber
-        let newPhase = creator.phase
-        let newNextTask = creator.nextTask
+    const creator = allCreators.find(c => c.id === creatorId)
+    if (!creator) return
 
-        // Simple progression logic - you can customize this
-        if (creator.phaseNumber < 4) {
-          // Check if should progress to next phase based on cards sold or other criteria
-          const shouldProgress = 
-            (creator.phaseNumber === 0) || // Always progress from strategy call
-            (creator.phaseNumber === 1 && creator.cardsSold > 0) || // Progress from prep when sales start
-            (creator.phaseNumber === 2 && creator.cardsSold > 50) || // Progress to sell-out push at 50%
-            (creator.phaseNumber === 3 && creator.cardsSold >= 100) // Complete when sold out
+    const updatedCreators = allCreators.map(c => {
+      if (c.id === creatorId) {
+        let newPhaseNumber = c.phaseNumber
+        let newPhase = c.phase
+        let newNextTask = c.nextTask
+        let newDaysInPhase = c.daysInPhase
 
-          if (shouldProgress) {
-            newPhaseNumber = creator.phaseNumber + 1
-            newPhase = `Phase ${newPhaseNumber}: ${phases[newPhaseNumber]?.name || 'Complete'}`
-            newNextTask = getNextTaskForPhase(newPhaseNumber)
-          } else {
-            // Just update to next task in same phase
-            newNextTask = getNextTaskForPhase(creator.phaseNumber)
-          }
+        // Check if should progress to next phase
+        if (shouldProgressPhase(c)) {
+          // Progress to next phase
+          newPhaseNumber = Math.min(c.phaseNumber + 1, 4)
+          newPhase = `Phase ${newPhaseNumber}: ${phases[newPhaseNumber]?.name || 'Complete'}`
+          newNextTask = getFirstTaskForPhase(newPhaseNumber)
+          newDaysInPhase = 0
         } else {
-          newNextTask = "Campaign complete"
+          // Stay in current phase, move to next task
+          newNextTask = getNextTaskInPhase(c.nextTask, c.phaseNumber)
+          newDaysInPhase = c.daysInPhase
         }
 
         return {
-          ...creator,
+          ...c,
           phaseNumber: newPhaseNumber,
           phase: newPhase,
           nextTask: newNextTask,
-          daysInPhase: newPhaseNumber !== creator.phaseNumber ? 0 : creator.daysInPhase,
+          daysInPhase: newDaysInPhase,
           lastUpdated: new Date().toISOString().split('T')[0]
         }
       }
-      return creator
+      return c
     })
 
     setAllCreators(updatedCreators)
     
-    // Show success message
-    const creator = allCreators.find(c => c.id === creatorId)
-    if (creator) {
-      alert(`✅ Task completed for ${creator.name}! Next: ${getNextTaskForPhase(creator.phaseNumber)}`)
+    // Show success message with context
+    const updatedCreator = updatedCreators.find(c => c.id === creatorId)
+    if (updatedCreator) {
+      const wasProgressed = updatedCreator.phaseNumber > creator.phaseNumber
+      const message = wasProgressed 
+        ? `🎉 ${creator.name} progressed to ${updatedCreator.phase}!\nNext: ${updatedCreator.nextTask}`
+        : `✅ Task completed for ${creator.name}!\nNext: ${updatedCreator.nextTask}`
+      
+      alert(message)
     }
   }
 
@@ -473,9 +546,12 @@ export default function Dashboard() {
                     </div>
 
                     <div>
-                      <h4 className="font-medium mb-2">Next Action</h4>
+                      <h4 className="font-medium mb-2">Current Task</h4>
                       <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                        <p className="text-sm">{selectedCreator.nextTask}</p>
+                        <p className="text-sm font-medium">{selectedCreator.nextTask}</p>
+                        <p className="text-xs text-gray-600 mt-1">
+                          Phase {selectedCreator.phaseNumber} • {selectedCreator.phase}
+                        </p>
                         <Button 
                           size="sm" 
                           className="mt-2"

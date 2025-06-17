@@ -16,7 +16,10 @@ import {
   Plus,
   Calendar,
   Target,
-  DollarSign
+  DollarSign,
+  MessageSquare,
+  Copy,
+  Eye
 } from 'lucide-react'
 import Analytics from '@/components/Analytics'
 import CreatorManagement from '@/components/CreatorManagement'
@@ -143,6 +146,18 @@ const getSalesVelocityColor = (velocity: string) => {
   }
 }
 
+// Get next task for phase progression
+const getNextTaskForPhase = (phaseNumber: number) => {
+  const nextTasks = [
+    "Schedule strategy call",
+    "Record teaser video", 
+    "Post launch announcement",
+    "Create urgency content",
+    "Send thank you message"
+  ]
+  return nextTasks[phaseNumber] || "Complete phase"
+}
+
 export default function Dashboard() {
   // Use localStorage to persist data across page refreshes
   const [allCreators, setAllCreators, isCreatorsHydrated] = useLocalStorage('stacked-creators', creators)
@@ -158,6 +173,12 @@ export default function Dashboard() {
     if (isCreatorsHydrated && allCreators.length > 0) {
       if (!selectedCreator || !allCreators.find(c => c.id === selectedCreator.id)) {
         setSelectedCreator(allCreators[0])
+      } else {
+        // Update selected creator with latest data
+        const updatedCreator = allCreators.find(c => c.id === selectedCreator.id)
+        if (updatedCreator) {
+          setSelectedCreator(updatedCreator)
+        }
       }
     }
   }, [allCreators, selectedCreator, isCreatorsHydrated])
@@ -182,6 +203,79 @@ export default function Dashboard() {
 
     return () => clearInterval(autoSync)
   }, [allCreators, setLastSyncTime])
+
+  // Handle marking task as complete
+  const handleMarkTaskComplete = (creatorId: number) => {
+    const updatedCreators = allCreators.map(creator => {
+      if (creator.id === creatorId) {
+        // Move to next phase if appropriate, or update next task
+        let newPhaseNumber = creator.phaseNumber
+        let newPhase = creator.phase
+        let newNextTask = creator.nextTask
+
+        // Simple progression logic - you can customize this
+        if (creator.phaseNumber < 4) {
+          // Check if should progress to next phase based on cards sold or other criteria
+          const shouldProgress = 
+            (creator.phaseNumber === 0) || // Always progress from strategy call
+            (creator.phaseNumber === 1 && creator.cardsSold > 0) || // Progress from prep when sales start
+            (creator.phaseNumber === 2 && creator.cardsSold > 50) || // Progress to sell-out push at 50%
+            (creator.phaseNumber === 3 && creator.cardsSold >= 100) // Complete when sold out
+
+          if (shouldProgress) {
+            newPhaseNumber = creator.phaseNumber + 1
+            newPhase = `Phase ${newPhaseNumber}: ${phases[newPhaseNumber]?.name || 'Complete'}`
+            newNextTask = getNextTaskForPhase(newPhaseNumber)
+          } else {
+            // Just update to next task in same phase
+            newNextTask = getNextTaskForPhase(creator.phaseNumber)
+          }
+        } else {
+          newNextTask = "Campaign complete"
+        }
+
+        return {
+          ...creator,
+          phaseNumber: newPhaseNumber,
+          phase: newPhase,
+          nextTask: newNextTask,
+          daysInPhase: newPhaseNumber !== creator.phaseNumber ? 0 : creator.daysInPhase,
+          lastUpdated: new Date().toISOString().split('T')[0]
+        }
+      }
+      return creator
+    })
+
+    setAllCreators(updatedCreators)
+    
+    // Show success message
+    const creator = allCreators.find(c => c.id === creatorId)
+    if (creator) {
+      alert(`✅ Task completed for ${creator.name}! Next: ${getNextTaskForPhase(creator.phaseNumber)}`)
+    }
+  }
+
+  // Handle copying content prompt
+  const handleCopyContentPrompt = (creator: any) => {
+    const prompts = {
+      0: `Hey ${creator.name}! Ready to plan your Top 100 launch strategy? Let's schedule a call to discuss your goals, pricing, and timeline. When works best for you this week?`,
+      1: `${creator.name}, time to create some buzz! 🔥 Can you record a quick teaser video showing behind-the-scenes content? Your fans love exclusive access - this will get them excited for what's coming!`,
+      2: `Launch week is here! 🚀 ${creator.name}, post your official announcement across all platforms. Remember to emphasize the limited quantity (only 100 spots) and exclusive access your top supporters will get.`,
+      3: `${creator.name}, it's crunch time! ⏰ Create urgency content showing how many cards are left. Post stories like "Only X cards remaining!" and share testimonials from current members.`,
+      4: `Amazing work ${creator.name}! 🎉 Time to thank your Top 100 members and deliver on those exclusive promises. This sets you up perfectly for your next campaign.`
+    }
+
+    const prompt = prompts[creator.phaseNumber as keyof typeof prompts] || `Great work ${creator.name}! Keep up the momentum.`
+    
+    navigator.clipboard.writeText(prompt)
+    alert(`📋 Content prompt copied to clipboard!\n\nYou can now paste and send this to ${creator.name} via your preferred communication method.`)
+  }
+
+  // Handle viewing analytics
+  const handleViewAnalytics = (creator: any) => {
+    setActiveTab("analytics")
+    // You could also filter analytics by creator here
+  }
 
   const totalCardsInMarket = allCreators.reduce((sum, creator) => sum + creator.cardsSold, 0)
   const totalRevenue = allCreators.reduce((sum, creator) => sum + (creator.cardsSold * creator.cardPrice), 0)
@@ -382,7 +476,11 @@ export default function Dashboard() {
                       <h4 className="font-medium mb-2">Next Action</h4>
                       <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                         <p className="text-sm">{selectedCreator.nextTask}</p>
-                        <Button size="sm" className="mt-2">
+                        <Button 
+                          size="sm" 
+                          className="mt-2"
+                          onClick={() => handleMarkTaskComplete(selectedCreator.id)}
+                        >
                           <CheckCircle2 className="w-3 h-3 mr-1" />
                           Mark Complete
                         </Button>
@@ -392,17 +490,35 @@ export default function Dashboard() {
                     <div>
                       <h4 className="font-medium mb-2">Quick Actions</h4>
                       <div className="space-y-2">
-                        <Button variant="outline" size="sm" className="w-full justify-start">
-                          <Calendar className="w-3 h-3 mr-2" />
-                          Schedule Check-in
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="w-full justify-start"
+                          onClick={() => handleCopyContentPrompt(selectedCreator)}
+                        >
+                          <MessageSquare className="w-3 h-3 mr-2" />
+                          Copy Content Prompt
                         </Button>
-                        <Button variant="outline" size="sm" className="w-full justify-start">
-                          <Target className="w-3 h-3 mr-2" />
-                          Send Content Prompt
-                        </Button>
-                        <Button variant="outline" size="sm" className="w-full justify-start">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="w-full justify-start"
+                          onClick={() => handleViewAnalytics(selectedCreator)}
+                        >
                           <BarChart3 className="w-3 h-3 mr-2" />
                           View Analytics
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="w-full justify-start"
+                          onClick={() => {
+                            setActiveTab("strategy")
+                            // Could also set selected creator in strategy guide
+                          }}
+                        >
+                          <Target className="w-3 h-3 mr-2" />
+                          View Strategy Guide
                         </Button>
                       </div>
                     </div>

@@ -21,7 +21,7 @@ export const testSupabaseConnection = async () => {
   try {
     console.log('🔍 Testing Supabase connection...')
     
-    // Test basic connection
+    // Test basic connection with a simple query
     const { data, error } = await supabase
       .from('creators')
       .select('count')
@@ -434,25 +434,30 @@ export const initializeDatabase = async () => {
     }
 
     // Check if tables exist and have data
-    const { data: creators, error: creatorsError } = await supabase
-      .from('creators')
-      .select('id')
-      .limit(1)
+    try {
+      const { data: creators, error: creatorsError } = await supabase
+        .from('creators')
+        .select('id')
+        .limit(1)
 
-    const { data: content, error: contentError } = await supabase
-      .from('content')
-      .select('id')
-      .limit(1)
+      const { data: content, error: contentError } = await supabase
+        .from('content')
+        .select('id')
+        .limit(1)
 
-    if (creatorsError || contentError) {
-      console.error('❌ Database tables not accessible:', { creatorsError, contentError })
+      if (creatorsError || contentError) {
+        console.error('❌ Database tables not accessible:', { creatorsError, contentError })
+        return false
+      }
+
+      console.log('✅ Database initialized successfully!')
+      console.log(`📊 Found ${creators?.length || 0} creators, ${content?.length || 0} content items`)
+      
+      return true
+    } catch (err) {
+      console.error('❌ Database tables check failed:', err)
       return false
     }
-
-    console.log('✅ Database initialized successfully!')
-    console.log(`📊 Found ${creators?.length || 0} creators, ${content?.length || 0} content items`)
-    
-    return true
   } catch (error) {
     console.error('❌ Database initialization failed:', error)
     return false

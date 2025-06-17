@@ -31,20 +31,36 @@ import {
   Sparkles,
   Trash2,
   AlertTriangle,
-  MessageSquare
+  MessageSquare,
+  Settings,
+  Globe
 } from 'lucide-react'
 import { TikTokIcon, InstagramIcon, TwitterIcon, YouTubeIcon } from '@/components/ui/icons'
 import AssetUpload from './AssetUpload'
 import PhaseManager from './PhaseManager'
 import { useToast } from '@/components/ui/toast'
+import { useLocalStorage } from '@/hooks/useLocalStorage'
 
-const categories = [
+// Default categories with ability to add/edit/delete
+const defaultCategories = [
   { value: "Gaming", icon: <Gamepad2 className="w-4 h-4" />, color: "bg-purple-100 text-purple-800" },
   { value: "Music", icon: <Music className="w-4 h-4" />, color: "bg-pink-100 text-pink-800" },
   { value: "Streaming", icon: <Tv className="w-4 h-4" />, color: "bg-blue-100 text-blue-800" },
   { value: "Lifestyle", icon: <Sparkles className="w-4 h-4" />, color: "bg-green-100 text-green-800" },
   { value: "Comedy", icon: <MessageSquare className="w-4 h-4" />, color: "bg-yellow-100 text-yellow-800" },
   { value: "Fashion", icon: <User className="w-4 h-4" />, color: "bg-orange-100 text-orange-800" }
+]
+
+const regions = [
+  { value: "US", label: "United States", flag: "🇺🇸" },
+  { value: "Brazil", label: "Brazil", flag: "🇧🇷" },
+  { value: "Canada", label: "Canada", flag: "🇨🇦" },
+  { value: "UK", label: "United Kingdom", flag: "🇬🇧" },
+  { value: "Germany", label: "Germany", flag: "🇩🇪" },
+  { value: "France", label: "France", flag: "🇫🇷" },
+  { value: "Australia", label: "Australia", flag: "🇦🇺" },
+  { value: "Japan", label: "Japan", flag: "🇯🇵" },
+  { value: "Other", label: "Other", flag: "🌍" }
 ]
 
 const phases = [
@@ -55,12 +71,13 @@ const phases = [
   { value: 4, name: "Phase 4: Post-Sellout", color: "purple" }
 ]
 
-interface Creator {
+export interface Creator {
   id: number
   name: string
   email: string
   phone: string
   category: string
+  region: string
   phase: string
   phaseNumber: number
   cardsSold: number
@@ -88,6 +105,7 @@ interface Creator {
     targetAudience?: string
     contentPlan?: string
   }
+  stackedProfileUrl?: string
   createdAt: string
   lastUpdated: string
 }
@@ -99,6 +117,7 @@ const initialCreators: Creator[] = [
     email: "kurama@example.com",
     phone: "+1 (555) 123-4567",
     category: "Gaming",
+    region: "US",
     phase: "Phase 2: Launch Week",
     phaseNumber: 2,
     cardsSold: 67,
@@ -126,6 +145,7 @@ const initialCreators: Creator[] = [
       targetAudience: "Competitive gaming fans, Smash community",
       contentPlan: "Daily gameplay tips, tournament insights, behind-the-scenes"
     },
+    stackedProfileUrl: "https://stacked.com/kurama",
     createdAt: "2025-06-10",
     lastUpdated: "2025-06-16"
   },
@@ -135,6 +155,7 @@ const initialCreators: Creator[] = [
     email: "nina@example.com",
     phone: "+1 (555) 234-5678",
     category: "Streaming",
+    region: "US",
     phase: "Phase 1: Drop Prep",
     phaseNumber: 1,
     cardsSold: 0,
@@ -161,7 +182,45 @@ const initialCreators: Creator[] = [
       targetAudience: "Streaming community, variety content viewers",
       contentPlan: "Stream highlights, Q&A sessions, exclusive behind-the-scenes"
     },
+    stackedProfileUrl: "https://stacked.com/nina-lin",
     createdAt: "2025-06-12",
+    lastUpdated: "2025-06-16"
+  },
+  {
+    id: 3,
+    name: "Edward So",
+    email: "edward@example.com",
+    phone: "+1 (555) 345-6789",
+    category: "Music",
+    region: "Brazil",
+    phase: "Phase 3: Sell-Out Push",
+    phaseNumber: 3,
+    cardsSold: 85,
+    totalCards: 100,
+    cardPrice: 90,
+    daysInPhase: 1,
+    nextTask: "Post 'only 15 left' story",
+    salesVelocity: "Medium",
+    avatar: "🎵",
+    bio: "DJ and creative entrepreneur from São Paulo. Known for electronic music and live performances.",
+    socialMedia: {
+      instagram: "@edwardso",
+      twitter: "@EdwardSoMusic",
+      tiktok: "@edward.djmusic"
+    },
+    assets: {
+      profileImages: ["edward_profile.jpg"],
+      videos: ["dj_set.mp4"],
+      pressKit: ["press_kit.pdf"]
+    },
+    strategy: {
+      launchDate: "2025-06-18",
+      pricingStructure: "$90 per card",
+      targetAudience: "Electronic music fans, Brazilian music scene",
+      contentPlan: "Live DJ sets, music production tutorials, exclusive tracks"
+    },
+    stackedProfileUrl: "https://stacked.com/edward-so",
+    createdAt: "2025-06-08",
     lastUpdated: "2025-06-16"
   }
 ]
@@ -181,10 +240,13 @@ export default function CreatorManagement({
 }: CreatorManagementProps = {}) {
   const { addToast } = useToast()
   const [creators, setCreators] = useState<Creator[]>(propCreators || initialCreators)
+  const [categories, setCategories] = useLocalStorage('stacked-categories', defaultCategories)
   const [isAddingCreator, setIsAddingCreator] = useState(false)
   const [editingCreator, setEditingCreator] = useState<number | null>(null)
   const [selectedCreator, setSelectedCreator] = useState<Creator | null>(null)
   const [deletingCreator, setDeletingCreator] = useState<Creator | null>(null)
+  const [isManagingCategories, setIsManagingCategories] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState('')
 
   // Sync with prop changes
   useEffect(() => {
@@ -209,6 +271,7 @@ export default function CreatorManagement({
       setIsAddingCreator(true)
     }
   }, [showAddCreator])
+  
   const [activeTab, setActiveTab] = useState("overview")
 
   const [newCreator, setNewCreator] = useState<Partial<Creator>>({
@@ -216,6 +279,7 @@ export default function CreatorManagement({
     email: "",
     phone: "",
     category: "",
+    region: "US",
     phase: "Phase 0: Strategy Call",
     phaseNumber: 0,
     cardsSold: 0,
@@ -232,7 +296,8 @@ export default function CreatorManagement({
       videos: [],
       pressKit: []
     },
-    strategy: {}
+    strategy: {},
+    stackedProfileUrl: ""
   })
 
   const handleAddCreator = () => {
@@ -263,6 +328,7 @@ export default function CreatorManagement({
       email: "",
       phone: "",
       category: "",
+      region: "US",
       phase: "Phase 0: Strategy Call",
       phaseNumber: 0,
       cardsSold: 0,
@@ -279,7 +345,8 @@ export default function CreatorManagement({
         videos: [],
         pressKit: []
       },
-      strategy: {}
+      strategy: {},
+      stackedProfileUrl: ""
     })
     setIsAddingCreator(false)
     onAddCreatorClose?.()
@@ -370,6 +437,52 @@ export default function CreatorManagement({
     return categories.find(c => c.value === category) || categories[0]
   }
 
+  const getRegionInfo = (region: string) => {
+    return regions.find(r => r.value === region) || regions[0]
+  }
+
+  const handleAddCategory = () => {
+    if (!newCategoryName.trim()) return
+
+    const newCategory = {
+      value: newCategoryName.trim(),
+      icon: <User className="w-4 h-4" />,
+      color: "bg-gray-100 text-gray-800"
+    }
+
+    setCategories([...categories, newCategory])
+    setNewCategoryName('')
+    addToast({
+      type: 'success',
+      title: 'Category Added',
+      description: `${newCategory.value} category has been added successfully.`
+    })
+  }
+
+  const handleDeleteCategory = (categoryValue: string) => {
+    // Check if any creators use this category
+    const creatorsUsingCategory = creators.filter(c => c.category === categoryValue)
+    
+    if (creatorsUsingCategory.length > 0) {
+      addToast({
+        type: 'error',
+        title: 'Cannot Delete Category',
+        description: `${creatorsUsingCategory.length} creator(s) are using this category. Please reassign them first.`
+      })
+      return
+    }
+
+    if (confirm(`Are you sure you want to delete the "${categoryValue}" category?`)) {
+      const updatedCategories = categories.filter(c => c.value !== categoryValue)
+      setCategories(updatedCategories)
+      addToast({
+        type: 'success',
+        title: 'Category Deleted',
+        description: `${categoryValue} category has been removed.`
+      })
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -377,10 +490,16 @@ export default function CreatorManagement({
           <h2 className="text-2xl font-bold">Creator Management</h2>
           <p className="text-gray-600">Manage creators, assets, and pipeline progression</p>
         </div>
-        <Button onClick={() => setIsAddingCreator(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Add Creator
-        </Button>
+        <div className="flex space-x-2">
+          <Button variant="outline" onClick={() => setIsManagingCategories(true)}>
+            <Settings className="w-4 h-4 mr-2" />
+            Manage Categories
+          </Button>
+          <Button onClick={() => setIsAddingCreator(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Add Creator
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -393,6 +512,7 @@ export default function CreatorManagement({
             <CardContent className="space-y-3">
               {creators.map((creator) => {
                 const categoryInfo = getCategoryInfo(creator.category)
+                const regionInfo = getRegionInfo(creator.region)
                 return (
                   <div
                     key={creator.id}
@@ -410,6 +530,7 @@ export default function CreatorManagement({
                         <div className="flex items-center space-x-1">
                           {categoryInfo.icon}
                           <span className="text-xs text-gray-600">{creator.category}</span>
+                          <span className="text-xs">{regionInfo.flag}</span>
                         </div>
                       </div>
                       <Button
@@ -460,31 +581,56 @@ export default function CreatorManagement({
                           <CardTitle className="text-2xl">{selectedCreator.name}</CardTitle>
                           <CardDescription className="flex items-center space-x-2">
                             {editingCreator === selectedCreator.id ? (
-                              <Select
-                                value={selectedCreator.category}
-                                onValueChange={(value) => setSelectedCreator({
-                                  ...selectedCreator,
-                                  category: value
-                                })}
-                              >
-                                <SelectTrigger className="w-40 h-6 text-sm">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {categories.map((category) => (
-                                    <SelectItem key={category.value} value={category.value}>
-                                      <div className="flex items-center space-x-2">
-                                        {category.icon}
-                                        <span>{category.value}</span>
-                                      </div>
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                              <div className="flex items-center space-x-2">
+                                <Select
+                                  value={selectedCreator.category}
+                                  onValueChange={(value) => setSelectedCreator({
+                                    ...selectedCreator,
+                                    category: value
+                                  })}
+                                >
+                                  <SelectTrigger className="w-40 h-6 text-sm">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {categories.map((category) => (
+                                      <SelectItem key={category.value} value={category.value}>
+                                        <div className="flex items-center space-x-2">
+                                          {category.icon}
+                                          <span>{category.value}</span>
+                                        </div>
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <Select
+                                  value={selectedCreator.region}
+                                  onValueChange={(value) => setSelectedCreator({
+                                    ...selectedCreator,
+                                    region: value
+                                  })}
+                                >
+                                  <SelectTrigger className="w-32 h-6 text-sm">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {regions.map((region) => (
+                                      <SelectItem key={region.value} value={region.value}>
+                                        <div className="flex items-center space-x-2">
+                                          <span>{region.flag}</span>
+                                          <span>{region.value}</span>
+                                        </div>
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
                             ) : (
                               <>
                                 {getCategoryInfo(selectedCreator.category).icon}
                                 <span>{selectedCreator.category}</span>
+                                <span>{getRegionInfo(selectedCreator.region).flag}</span>
+                                <span>{selectedCreator.region}</span>
                               </>
                             )}
                           </CardDescription>
@@ -691,6 +837,43 @@ export default function CreatorManagement({
                         </div>
                       </div>
                     </div>
+
+                    {/* Stacked Profile Link */}
+                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                      <h4 className="font-medium mb-2 flex items-center">
+                        <Globe className="w-4 h-4 mr-2" />
+                        Stacked Profile
+                      </h4>
+                      <div className="flex items-center space-x-2">
+                        {editingCreator === selectedCreator.id ? (
+                          <Input
+                            value={selectedCreator.stackedProfileUrl || ''}
+                            onChange={(e) => setSelectedCreator({
+                              ...selectedCreator,
+                              stackedProfileUrl: e.target.value
+                            })}
+                            placeholder="https://stacked.com/creator-name"
+                            className="flex-1"
+                          />
+                        ) : (
+                          <>
+                            <span className="flex-1 text-sm">
+                              {selectedCreator.stackedProfileUrl || 'No profile URL set'}
+                            </span>
+                            {selectedCreator.stackedProfileUrl && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => window.open(selectedCreator.stackedProfileUrl, '_blank')}
+                              >
+                                <ExternalLink className="w-3 h-3 mr-1" />
+                                Visit
+                              </Button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -875,6 +1058,38 @@ export default function CreatorManagement({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
+                  <label className="block text-sm font-medium mb-2">Region</label>
+                  <Select
+                    value={newCreator.region || "US"}
+                    onValueChange={(value) => setNewCreator({...newCreator, region: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {regions.map((region) => (
+                        <SelectItem key={region.value} value={region.value}>
+                          <div className="flex items-center space-x-2">
+                            <span>{region.flag}</span>
+                            <span>{region.label}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Avatar Emoji</label>
+                  <Input
+                    value={newCreator.avatar || "👤"}
+                    onChange={(e) => setNewCreator({...newCreator, avatar: e.target.value})}
+                    placeholder="👤"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
                   <label className="block text-sm font-medium mb-2">Email</label>
                   <Input
                     type="email"
@@ -914,11 +1129,11 @@ export default function CreatorManagement({
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">Avatar Emoji</label>
+                  <label className="block text-sm font-medium mb-2">Stacked Profile URL</label>
                   <Input
-                    value={newCreator.avatar || "👤"}
-                    onChange={(e) => setNewCreator({...newCreator, avatar: e.target.value})}
-                    placeholder="👤"
+                    value={newCreator.stackedProfileUrl || ""}
+                    onChange={(e) => setNewCreator({...newCreator, stackedProfileUrl: e.target.value})}
+                    placeholder="https://stacked.com/creator-name"
                   />
                 </div>
               </div>
@@ -1019,6 +1234,68 @@ export default function CreatorManagement({
         </div>
       )}
 
+      {/* Manage Categories Modal */}
+      {isManagingCategories && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <Card className="w-full max-w-md">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Manage Categories</CardTitle>
+                <Button variant="outline" size="sm" onClick={() => setIsManagingCategories(false)}>
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <h4 className="font-medium">Current Categories</h4>
+                {categories.map((category) => (
+                  <div key={category.value} className="flex items-center justify-between p-2 border rounded">
+                    <div className="flex items-center space-x-2">
+                      {category.icon}
+                      <span>{category.value}</span>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleDeleteCategory(category.value)}
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="border-t pt-4">
+                <h4 className="font-medium mb-2">Add New Category</h4>
+                <div className="flex space-x-2">
+                  <Input
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    placeholder="Category name"
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        handleAddCategory()
+                      }
+                    }}
+                  />
+                  <Button onClick={handleAddCategory} disabled={!newCategoryName.trim()}>
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-4">
+                <Button onClick={() => setIsManagingCategories(false)}>
+                  Done
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Delete Creator Confirmation Modal */}
       {deletingCreator && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -1044,6 +1321,7 @@ export default function CreatorManagement({
                   <li>• Pipeline progress and phase history</li>
                   <li>• All uploaded assets and documents</li>
                   <li>• Strategy notes and content plans</li>
+                  <li>• Custom strategies and recommendations</li>
                 </ul>
               </div>
 

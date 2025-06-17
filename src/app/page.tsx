@@ -37,6 +37,7 @@ const creators = [
     email: "kurama@example.com",
     phone: "+1 (555) 123-4567",
     category: "Gaming",
+    region: "US",
     phase: "Phase 2: Launch Week",
     phaseNumber: 2,
     cardsSold: 67,
@@ -59,6 +60,7 @@ const creators = [
       targetAudience: "Competitive gaming fans",
       contentPlan: "Daily gameplay tips"
     },
+    stackedProfileUrl: "https://stacked.com/kurama",
     createdAt: "2025-06-10",
     lastUpdated: "2025-06-16"
   },
@@ -68,6 +70,7 @@ const creators = [
     email: "nina@example.com",
     phone: "+1 (555) 234-5678",
     category: "Streaming",
+    region: "US",
     phase: "Phase 1: Drop Prep",
     phaseNumber: 1,
     cardsSold: 0,
@@ -89,6 +92,7 @@ const creators = [
       targetAudience: "Streaming community",
       contentPlan: "Stream highlights"
     },
+    stackedProfileUrl: "https://stacked.com/nina-lin",
     createdAt: "2025-06-12",
     lastUpdated: "2025-06-16"
   },
@@ -98,6 +102,7 @@ const creators = [
     email: "edward@example.com",
     phone: "+1 (555) 345-6789",
     category: "Music",
+    region: "Brazil",
     phase: "Phase 3: Sell-Out Push",
     phaseNumber: 3,
     cardsSold: 85,
@@ -119,6 +124,7 @@ const creators = [
       targetAudience: "Music fans",
       contentPlan: "Live sets and remixes"
     },
+    stackedProfileUrl: "https://stacked.com/edward-so",
     createdAt: "2025-06-08",
     lastUpdated: "2025-06-16"
   }
@@ -363,8 +369,8 @@ export default function Dashboard() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-4xl font-bold text-gray-900">Stacked Workflow</h1>
-            <p className="text-gray-600 mt-2">Creator pipeline management & automation</p>
+            <h1 className="text-4xl font-bold text-gray-900">Stacked Creator Pipeline</h1>
+            <p className="text-gray-600 mt-2">Creator pipeline management & automation platform</p>
             {lastSyncTime && (
               <div className="flex items-center mt-1 text-sm text-gray-500">
                 <div className={`w-2 h-2 rounded-full mr-2 ${isAutoSyncing ? 'bg-yellow-400 animate-pulse' : 'bg-green-400'}`} />
@@ -480,7 +486,12 @@ export default function Dashboard() {
                             <div className="text-2xl">{creator.avatar}</div>
                             <div>
                               <h3 className="font-semibold">{creator.name}</h3>
-                              <p className="text-sm text-gray-600">{creator.category}</p>
+                              <div className="flex items-center space-x-2">
+                                <p className="text-sm text-gray-600">{creator.category}</p>
+                                <Badge variant="outline" className="text-xs">
+                                  {creator.region}
+                                </Badge>
+                              </div>
                             </div>
                           </div>
                           <Badge
@@ -522,7 +533,12 @@ export default function Dashboard() {
                       <span className="text-2xl">{selectedCreator.avatar}</span>
                       <span>{selectedCreator.name}</span>
                     </CardTitle>
-                    <CardDescription>{selectedCreator.category}</CardDescription>
+                    <CardDescription className="flex items-center space-x-2">
+                      <span>{selectedCreator.category}</span>
+                      <Badge variant="outline" className="text-xs">
+                        {selectedCreator.region}
+                      </Badge>
+                    </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -14,28 +14,30 @@ import {
   Save,
   X,
   Trash2,
-  Upload,
-  Download,
-  Eye,
   User,
   Mail,
   Phone,
-  Globe,
+  Instagram,
+  Twitter,
+  Youtube,
+  MessageSquare,
   Calendar,
-  Target,
   DollarSign,
   TrendingUp,
-  Settings,
-  Tag,
-  ArrowUp,
-  ArrowDown
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+  Search,
+  Filter,
+  Tag
 } from 'lucide-react'
-import AssetUpload from './AssetUpload'
-import PhaseManager from './PhaseManager'
-import CategoryManager from './CategoryManager'
-import { useCategories } from '@/hooks/useCategories'
+import { InstagramIcon, TwitterIcon, YouTubeIcon, TikTokIcon } from '@/components/ui/icons'
+import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { useToast } from '@/components/ui/toast'
-import { useCloudCreators } from '@/hooks/useCloudStorage'
+import PhaseManager from '@/components/PhaseManager'
+import AssetUpload from '@/components/AssetUpload'
+import ProfilePictureUpload from '@/components/ProfilePictureUpload'
+import CategoryManager from '@/components/CategoryManager'
 
 export interface Creator {
   id: number
@@ -67,7 +69,6 @@ export interface Creator {
   }
   strategy: {
     launchDate?: string
-    pricingStructure?: string
     targetAudience?: string
     contentPlan?: string
   }
@@ -84,18 +85,38 @@ interface CreatorManagementProps {
 }
 
 const regions = [
-  { value: 'US', label: 'United States (North America)', flag: '🇺🇸' },
-  { value: 'Brazil', label: 'Brazil (South America)', flag: '🇧🇷' }
+  'US',
+  'Canada',
+  'UK',
+  'Australia',
+  'Brazil',
+  'Japan',
+  'Germany',
+  'France',
+  'Italy',
+  'Spain',
+  'Mexico',
+  'South Korea',
+  'India',
+  'China',
+  'Russia',
+  'Other'
 ]
 
-const salesVelocityOptions = ['Pending', 'Low', 'Medium', 'High', 'Very High']
-
 const phases = [
-  { number: 0, name: 'Phase 0: Strategy Call', color: 'bg-blue-100 text-blue-800' },
-  { number: 1, name: 'Phase 1: Drop Prep', color: 'bg-yellow-100 text-yellow-800' },
-  { number: 2, name: 'Phase 2: Launch Week', color: 'bg-green-100 text-green-800' },
-  { number: 3, name: 'Phase 3: Sell-Out Push', color: 'bg-orange-100 text-orange-800' },
-  { number: 4, name: 'Phase 4: Post-Sellout', color: 'bg-purple-100 text-purple-800' }
+  { id: 0, name: 'Phase 0: Strategy Call', color: 'blue' },
+  { id: 1, name: 'Phase 1: Drop Prep', color: 'yellow' },
+  { id: 2, name: 'Phase 2: Launch Week', color: 'green' },
+  { id: 3, name: 'Phase 3: Sell-Out Push', color: 'orange' },
+  { id: 4, name: 'Phase 4: Post-Sellout', color: 'purple' }
+]
+
+const velocities = [
+  { id: 'High', name: 'High', color: 'green' },
+  { id: 'Medium', name: 'Medium', color: 'yellow' },
+  { id: 'Low', name: 'Low', color: 'red' },
+  { id: 'Pending', name: 'Pending', color: 'gray' },
+  { id: 'Very High', name: 'Very High', color: 'blue' }
 ]
 
 export default function CreatorManagement({
@@ -104,33 +125,46 @@ export default function CreatorManagement({
   showAddCreator = false,
   onAddCreatorClose
 }: CreatorManagementProps) {
-  const { categories, getCategoryNames } = useCategories()
-  const { success, error } = useToast()
   const [selectedCreator, setSelectedCreator] = useState<Creator | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [isCreating, setIsCreating] = useState(showAddCreator)
-  const [showCategoryManager, setShowCategoryManager] = useState(false)
   const [editForm, setEditForm] = useState<Partial<Creator>>({})
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  
-  // Use cloud storage hooks
-  const { 
-    addCreator: addCreatorToCloud, 
-    updateCreator: updateCreatorInCloud,
-    deleteCreator: deleteCreatorFromCloud,
-    isOnline: isCloudConnected
-  } = useCloudCreators()
+  const [activeTab, setActiveTab] = useState('info')
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filterCategory, setFilterCategory] = useState('all')
+  const [filterPhase, setFilterPhase] = useState('all')
+  const [showCategoryManager, setShowCategoryManager] = useState(false)
+  const { success, error } = useToast()
 
-  // Handle showAddCreator prop changes
+  // Update isCreating when showAddCreator prop changes
   useEffect(() => {
     setIsCreating(showAddCreator)
   }, [showAddCreator])
 
-  const handleCreateCreator = async () => {
+  // Update selectedCreator when creators change
+  useEffect(() => {
+    if (selectedCreator) {
+      const updatedCreator = creators.find(c => c.id === selectedCreator.id)
+      if (updatedCreator) {
+        setSelectedCreator(updatedCreator)
+      } else if (creators.length > 0) {
+        setSelectedCreator(creators[0])
+      } else {
+        setSelectedCreator(null)
+      }
+    } else if (creators.length > 0 && !isCreating) {
+      setSelectedCreator(creators[0])
+    }
+  }, [creators, selectedCreator, isCreating])
+
+  const handleCreateCreator = () => {
     if (!editForm.name || !editForm.category) {
       error('Name and category are required')
       return
     }
+
+    const phaseNumber = editForm.phaseNumber || 0
+    const phaseName = phases.find(p => p.id === phaseNumber)?.name || 'Phase 0: Strategy Call'
 
     const newCreator: Creator = {
       id: Date.now(),
@@ -139,14 +173,14 @@ export default function CreatorManagement({
       phone: editForm.phone || '',
       category: editForm.category || '',
       region: editForm.region || 'US',
-      phase: 'Phase 0: Strategy Call',
-      phaseNumber: 0,
-      cardsSold: 0,
-      totalCards: 100,
+      phase: phaseName,
+      phaseNumber: phaseNumber,
+      cardsSold: editForm.cardsSold || 0,
+      totalCards: editForm.totalCards || 100,
       cardPrice: editForm.cardPrice || 100,
-      daysInPhase: 0,
-      nextTask: 'Schedule strategy call',
-      salesVelocity: 'Pending',
+      daysInPhase: editForm.daysInPhase || 0,
+      nextTask: editForm.nextTask || 'Schedule strategy call',
+      salesVelocity: editForm.salesVelocity || 'Pending',
       avatar: editForm.avatar || '👤',
       bio: editForm.bio || '',
       socialMedia: {
@@ -165,137 +199,89 @@ export default function CreatorManagement({
         targetAudience: editForm.strategy?.targetAudience || '',
         contentPlan: editForm.strategy?.contentPlan || ''
       },
-      stackedProfileUrl: editForm.stackedProfileUrl || '',
       createdAt: new Date().toISOString().split('T')[0],
       lastUpdated: new Date().toISOString().split('T')[0]
     }
 
-    try {
-      // Add to cloud storage
-      if (isCloudConnected) {
-        const cloudCreator = await addCreatorToCloud(newCreator)
-        if (cloudCreator) {
-          // Cloud storage handles the state update
-          success(`Creator ${newCreator.name} added and synced to cloud`)
-        } else {
-          // Fallback to local update if cloud fails
-          onCreatorsUpdate([...creators, newCreator])
-          success(`Creator ${newCreator.name} added locally`)
-        }
-      } else {
-        // Local update only
-        onCreatorsUpdate([...creators, newCreator])
-        success(`Creator ${newCreator.name} added locally`)
-      }
-      
-      setIsCreating(false)
-      setEditForm({})
-      onAddCreatorClose?.()
-    } catch (err) {
-      console.error('Failed to create creator:', err)
-      error('Failed to create creator. Please try again.')
+    onCreatorsUpdate([...creators, newCreator])
+    setSelectedCreator(newCreator)
+    setIsCreating(false)
+    setEditForm({})
+    success('Creator added successfully')
+    
+    if (onAddCreatorClose) {
+      onAddCreatorClose()
     }
   }
 
-  const handleUpdateCreator = async () => {
-    if (!selectedCreator || !editForm.name || !editForm.category) {
+  const handleUpdateCreator = () => {
+    if (!selectedCreator) return
+    if (!editForm.name || !editForm.category) {
       error('Name and category are required')
       return
     }
 
-    try {
-      const updatedCreator = {
-        ...selectedCreator,
-        ...editForm,
-        lastUpdated: new Date().toISOString().split('T')[0]
+    const phaseNumber = editForm.phaseNumber !== undefined ? editForm.phaseNumber : selectedCreator.phaseNumber
+    const phaseName = phases.find(p => p.id === phaseNumber)?.name || selectedCreator.phase
+
+    const updatedCreator: Creator = {
+      ...selectedCreator,
+      name: editForm.name || selectedCreator.name,
+      email: editForm.email || selectedCreator.email,
+      phone: editForm.phone || selectedCreator.phone,
+      category: editForm.category || selectedCreator.category,
+      region: editForm.region || selectedCreator.region,
+      phase: phaseName,
+      phaseNumber: phaseNumber,
+      cardsSold: editForm.cardsSold !== undefined ? editForm.cardsSold : selectedCreator.cardsSold,
+      totalCards: editForm.totalCards || selectedCreator.totalCards,
+      cardPrice: editForm.cardPrice || selectedCreator.cardPrice,
+      daysInPhase: editForm.daysInPhase !== undefined ? editForm.daysInPhase : selectedCreator.daysInPhase,
+      nextTask: editForm.nextTask || selectedCreator.nextTask,
+      salesVelocity: editForm.salesVelocity || selectedCreator.salesVelocity,
+      avatar: editForm.avatar || selectedCreator.avatar,
+      bio: editForm.bio || selectedCreator.bio,
+      socialMedia: {
+        instagram: editForm.socialMedia?.instagram || selectedCreator.socialMedia.instagram || '',
+        twitter: editForm.socialMedia?.twitter || selectedCreator.socialMedia.twitter || '',
+        youtube: editForm.socialMedia?.youtube || selectedCreator.socialMedia.youtube || '',
+        tiktok: editForm.socialMedia?.tiktok || selectedCreator.socialMedia.tiktok || ''
+      },
+      strategy: {
+        launchDate: editForm.strategy?.launchDate || selectedCreator.strategy.launchDate || '',
+        targetAudience: editForm.strategy?.targetAudience || selectedCreator.strategy.targetAudience || '',
+        contentPlan: editForm.strategy?.contentPlan || selectedCreator.strategy.contentPlan || ''
+      },
+      lastUpdated: new Date().toISOString().split('T')[0]
+    }
+
+    const updatedCreators = creators.map(creator =>
+      creator.id === selectedCreator.id ? updatedCreator : creator
+    )
+
+    onCreatorsUpdate(updatedCreators)
+    setSelectedCreator(updatedCreator)
+    setIsEditing(false)
+    setEditForm({})
+    success('Creator updated successfully')
+  }
+
+  const handleDeleteCreator = (id: number) => {
+    if (confirm('Are you sure you want to delete this creator?')) {
+      const updatedCreators = creators.filter(creator => creator.id !== id)
+      onCreatorsUpdate(updatedCreators)
+      
+      if (selectedCreator?.id === id) {
+        setSelectedCreator(updatedCreators.length > 0 ? updatedCreators[0] : null)
       }
       
-      // Update in cloud storage
-      if (isCloudConnected) {
-        await updateCreatorInCloud(selectedCreator.id, editForm)
-        // Cloud storage handles the state update
-        success(`Creator ${updatedCreator.name} updated and synced to cloud`)
-      } else {
-        // Local update only
-        const updatedCreators = creators.map(creator =>
-          creator.id === selectedCreator.id ? updatedCreator : creator
-        )
-        onCreatorsUpdate(updatedCreators)
-        setSelectedCreator(updatedCreator)
-        success(`Creator ${updatedCreator.name} updated locally`)
-      }
-      
-      setIsEditing(false)
-    } catch (err) {
-      console.error('Failed to update creator:', err)
-      error('Failed to update creator. Please try again.')
+      success('Creator deleted successfully')
     }
   }
 
-  const handleDeleteCreator = async (creatorId: number) => {
-    if (!confirm('Are you sure you want to delete this creator?')) {
-      return
-    }
-    
-    try {
-      // Delete from cloud storage
-      if (isCloudConnected) {
-        await deleteCreatorFromCloud(creatorId)
-        // Cloud storage handles the state update
-        success('Creator deleted and synced to cloud')
-      } else {
-        // Local deletion only
-        const updatedCreators = creators.filter(creator => creator.id !== creatorId)
-        onCreatorsUpdate(updatedCreators)
-        success('Creator deleted locally')
-      }
-      
-      if (selectedCreator?.id === creatorId) {
-        setSelectedCreator(null)
-      }
-    } catch (err) {
-      console.error('Failed to delete creator:', err)
-      error('Failed to delete creator. Please try again.')
-    }
-  }
-
-  const handlePhaseChange = (creatorId: number, newPhaseNumber: number) => {
-    const phase = phases.find(p => p.number === newPhaseNumber)
-    if (!phase) return
-
-    try {
-      const updates = {
-        phaseNumber: newPhaseNumber,
-        phase: phase.name,
-        daysInPhase: 0, // Reset days when manually changing phase
-        lastUpdated: new Date().toISOString().split('T')[0]
-      }
-      
-      // Update in cloud storage
-      if (isCloudConnected) {
-        updateCreatorInCloud(creatorId, updates)
-        // Cloud storage handles the state update
-        success(`Creator moved to ${phase.name}`)
-      } else {
-        // Local update only
-        const updatedCreators = creators.map(creator =>
-          creator.id === creatorId ? { ...creator, ...updates } : creator
-        )
-        onCreatorsUpdate(updatedCreators)
-        if (selectedCreator?.id === creatorId) {
-          setSelectedCreator({ ...selectedCreator, ...updates })
-        }
-        success(`Creator moved to ${phase.name}`)
-      }
-    } catch (err) {
-      console.error('Failed to change phase:', err)
-      error('Failed to change phase. Please try again.')
-    }
-  }
-
-  const startEditing = (creator: Creator) => {
-    setSelectedCreator(creator)
-    setEditForm(creator)
+  const startEditing = () => {
+    if (!selectedCreator) return
+    setEditForm(selectedCreator)
     setIsEditing(true)
   }
 
@@ -307,76 +293,109 @@ export default function CreatorManagement({
   const cancelCreating = () => {
     setIsCreating(false)
     setEditForm({})
-    onAddCreatorClose?.()
+    if (onAddCreatorClose) {
+      onAddCreatorClose()
+    }
   }
 
-  const handleAssetsUpdate = (assetType: keyof Creator['assets'], assets: string[]) => {
+  const handleAvatarUpdate = (avatar: string) => {
+    if (isEditing && selectedCreator) {
+      setEditForm({ ...editForm, avatar })
+    } else if (isCreating) {
+      setEditForm({ ...editForm, avatar })
+    } else if (selectedCreator) {
+      // Direct update without edit mode
+      const updatedCreator = { ...selectedCreator, avatar, lastUpdated: new Date().toISOString().split('T')[0] }
+      const updatedCreators = creators.map(creator =>
+        creator.id === selectedCreator.id ? updatedCreator : creator
+      )
+      onCreatorsUpdate(updatedCreators)
+      setSelectedCreator(updatedCreator)
+      success('Profile picture updated')
+    }
+  }
+
+  const handleAssetsUpdate = (assetType: 'profileImages' | 'videos' | 'pressKit', assets: string[]) => {
     if (!selectedCreator) return
 
-    try {
-      const updates = {
-        assets: {
-          ...selectedCreator.assets,
-          [assetType]: assets
-        },
-        lastUpdated: new Date().toISOString().split('T')[0]
-      }
-      
-      // Update in cloud storage
-      if (isCloudConnected) {
-        updateCreatorInCloud(selectedCreator.id, updates)
-        // Cloud storage handles the state update
-        success('Assets updated and synced to cloud')
-      } else {
-        // Local update only
-        const updatedCreator = { ...selectedCreator, ...updates }
-        const updatedCreators = creators.map(creator =>
-          creator.id === selectedCreator.id ? updatedCreator : creator
-        )
-        onCreatorsUpdate(updatedCreators)
-        setSelectedCreator(updatedCreator)
-        success('Assets updated locally')
-      }
-    } catch (err) {
-      console.error('Failed to update assets:', err)
-      error('Failed to update assets. Please try again.')
+    const updatedCreator = {
+      ...selectedCreator,
+      assets: {
+        ...selectedCreator.assets,
+        [assetType]: assets
+      },
+      lastUpdated: new Date().toISOString().split('T')[0]
     }
+
+    const updatedCreators = creators.map(creator =>
+      creator.id === selectedCreator.id ? updatedCreator : creator
+    )
+
+    onCreatorsUpdate(updatedCreators)
+    setSelectedCreator(updatedCreator)
+    success('Assets updated successfully')
   }
 
-  const getRegionDisplay = (region: string) => {
-    const regionData = regions.find(r => r.value === region)
-    return regionData ? `${regionData.flag} ${regionData.label}` : region
+  const handlePhaseUpdate = (phases: any[]) => {
+    if (!selectedCreator) return
+
+    // Update creator with phase information
+    const updatedCreator = {
+      ...selectedCreator,
+      lastUpdated: new Date().toISOString().split('T')[0]
+    }
+
+    const updatedCreators = creators.map(creator =>
+      creator.id === selectedCreator.id ? updatedCreator : creator
+    )
+
+    onCreatorsUpdate(updatedCreators)
+    setSelectedCreator(updatedCreator)
+    success('Phases updated successfully')
   }
 
-  const getCategoryColor = (categoryName: string) => {
-    const category = categories.find(cat => cat.name === categoryName)
-    if (!category) return 'bg-gray-100 text-gray-800'
-    
-    const colorMap: Record<string, string> = {
-      purple: 'bg-purple-100 text-purple-800',
-      pink: 'bg-pink-100 text-pink-800',
-      blue: 'bg-blue-100 text-blue-800',
-      green: 'bg-green-100 text-green-800',
-      yellow: 'bg-yellow-100 text-yellow-800',
-      orange: 'bg-orange-100 text-orange-800',
-      red: 'bg-red-100 text-red-800',
-      indigo: 'bg-indigo-100 text-indigo-800',
-      teal: 'bg-teal-100 text-teal-800',
-      gray: 'bg-gray-100 text-gray-800'
+  const filteredCreators = creators.filter(creator => {
+    const matchesSearch = creator.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         creator.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         creator.category.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesCategory = filterCategory === 'all' || creator.category === filterCategory
+    const matchesPhase = filterPhase === 'all' || creator.phaseNumber.toString() === filterPhase
+    return matchesSearch && matchesCategory && matchesPhase
+  })
+
+  const getPhaseColor = (phaseNumber: number) => {
+    const colors = {
+      0: "bg-blue-100 text-blue-800",
+      1: "bg-yellow-100 text-yellow-800",
+      2: "bg-green-100 text-green-800",
+      3: "bg-orange-100 text-orange-800",
+      4: "bg-purple-100 text-purple-800"
     }
-    
-    return colorMap[category.color] || 'bg-gray-100 text-gray-800'
+    return colors[phaseNumber as keyof typeof colors] || "bg-gray-100 text-gray-800"
   }
+
+  const getVelocityColor = (velocity: string) => {
+    const colors = {
+      'High': "bg-green-100 text-green-800",
+      'Medium': "bg-yellow-100 text-yellow-800",
+      'Low': "bg-red-100 text-red-800",
+      'Pending': "bg-gray-100 text-gray-800",
+      'Very High': "bg-blue-100 text-blue-800"
+    }
+    return colors[velocity as keyof typeof colors] || "bg-gray-100 text-gray-800"
+  }
+
+  const uniqueCategories = Array.from(new Set(creators.map(creator => creator.category)))
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">Creator Management</h2>
-          <p className="text-gray-600">Manage creator profiles, assets, and pipeline progress</p>
+          <p className="text-gray-600">Add, edit, and manage creators in your pipeline</p>
         </div>
         <div className="flex space-x-2">
-          <Button variant="outline" onClick={() => setShowCategoryManager(true)}>
+          <Button onClick={() => setShowCategoryManager(true)} variant="outline">
             <Tag className="w-4 h-4 mr-2" />
             Manage Categories
           </Button>
@@ -387,16 +406,61 @@ export default function CreatorManagement({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      {/* Filters */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex-1">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <Input
+                  placeholder="Search creators..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+            <Select value={filterCategory} onValueChange={setFilterCategory}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="All Categories" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {uniqueCategories.map((category) => (
+                  <SelectItem key={category} value={category}>
+                    {category}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filterPhase} onValueChange={setFilterPhase}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="All Phases" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Phases</SelectItem>
+                {phases.map((phase) => (
+                  <SelectItem key={phase.id} value={phase.id.toString()}>
+                    {phase.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Creator List */}
         <div className="lg:col-span-1">
           <Card>
             <CardHeader>
-              <CardTitle>Creators ({creators.length})</CardTitle>
+              <CardTitle>Creators ({filteredCreators.length})</CardTitle>
               <CardDescription>Select a creator to view details</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {creators.map((creator) => (
+              {filteredCreators.map((creator) => (
                 <div
                   key={creator.id}
                   className={`p-3 border rounded-lg cursor-pointer transition-colors ${
@@ -404,36 +468,41 @@ export default function CreatorManagement({
                       ? 'border-blue-500 bg-blue-50'
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
-                  onClick={() => setSelectedCreator(creator)}
+                  onClick={() => {
+                    setSelectedCreator(creator)
+                    setIsEditing(false)
+                    setEditForm({})
+                  }}
                 >
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-lg">{creator.avatar}</span>
+                    <div className="flex items-center space-x-3">
+                      <div className="text-2xl">{creator.avatar}</div>
                       <div>
-                        <h4 className="font-medium text-sm">{creator.name}</h4>
-                        <div className="flex items-center space-x-1">
-                          <Badge className={`text-xs ${getCategoryColor(creator.category)}`}>
-                            {creator.category}
-                          </Badge>
-                          <span className="text-xs">
-                            {regions.find(r => r.value === creator.region)?.flag}
-                          </span>
-                        </div>
+                        <h4 className="font-medium">{creator.name}</h4>
+                        <p className="text-sm text-gray-600">{creator.category}</p>
                       </div>
                     </div>
+                    <Badge className={getPhaseColor(creator.phaseNumber)}>
+                      Phase {creator.phaseNumber}
+                    </Badge>
                   </div>
-                  <div className="mt-2 text-xs text-gray-500">
-                    {creator.cardsSold}/100 cards • ${(creator.cardsSold * creator.cardPrice).toLocaleString()}
+                  <div className="mt-2">
+                    <div className="flex justify-between text-xs text-gray-500">
+                      <span>{creator.cardsSold}/{creator.totalCards} cards</span>
+                      <Badge className={`text-xs ${getVelocityColor(creator.salesVelocity)}`}>
+                        {creator.salesVelocity}
+                      </Badge>
+                    </div>
                   </div>
                 </div>
               ))}
-              {creators.length === 0 && (
+              {filteredCreators.length === 0 && (
                 <div className="text-center py-8 text-gray-500">
                   <User className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                  <p className="text-sm">No creators yet</p>
+                  <p className="text-sm">No creators found</p>
                   <Button size="sm" className="mt-2" onClick={() => setIsCreating(true)}>
                     <Plus className="w-3 h-3 mr-1" />
-                    Add First Creator
+                    Add Creator
                   </Button>
                 </div>
               )}
@@ -442,7 +511,7 @@ export default function CreatorManagement({
         </div>
 
         {/* Creator Details */}
-        <div className="lg:col-span-3">
+        <div className="lg:col-span-2">
           {isCreating ? (
             <Card>
               <CardHeader>
@@ -464,14 +533,6 @@ export default function CreatorManagement({
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-2">Avatar</label>
-                    <Input
-                      value={editForm.avatar || ''}
-                      onChange={(e) => setEditForm({ ...editForm, avatar: e.target.value })}
-                      placeholder="👤"
-                    />
-                  </div>
-                  <div>
                     <label className="block text-sm font-medium mb-2">Category *</label>
                     <Select
                       value={editForm.category || ''}
@@ -481,31 +542,9 @@ export default function CreatorManagement({
                         <SelectValue placeholder="Select category" />
                       </SelectTrigger>
                       <SelectContent>
-                        {getCategoryNames().map((category) => (
+                        {uniqueCategories.map((category) => (
                           <SelectItem key={category} value={category}>
-                            <div className="flex items-center space-x-2">
-                              <Badge className={`text-xs ${getCategoryColor(category)}`}>
-                                {category}
-                              </Badge>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Region</label>
-                    <Select
-                      value={editForm.region || 'US'}
-                      onValueChange={(value) => setEditForm({ ...editForm, region: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {regions.map((region) => (
-                          <SelectItem key={region.value} value={region.value}>
-                            {region.flag} {region.label}
+                            {category}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -517,7 +556,7 @@ export default function CreatorManagement({
                       type="email"
                       value={editForm.email || ''}
                       onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                      placeholder="creator@example.com"
+                      placeholder="email@example.com"
                     />
                   </div>
                   <div>
@@ -529,21 +568,40 @@ export default function CreatorManagement({
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-2">Card Price</label>
-                    <Input
-                      type="number"
-                      value={editForm.cardPrice || 100}
-                      onChange={(e) => setEditForm({ ...editForm, cardPrice: Number(e.target.value) })}
-                      placeholder="100"
-                    />
+                    <label className="block text-sm font-medium mb-2">Region</label>
+                    <Select
+                      value={editForm.region || 'US'}
+                      onValueChange={(value) => setEditForm({ ...editForm, region: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select region" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {regions.map((region) => (
+                          <SelectItem key={region} value={region}>
+                            {region}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-2">Stacked Profile URL</label>
-                    <Input
-                      value={editForm.stackedProfileUrl || ''}
-                      onChange={(e) => setEditForm({ ...editForm, stackedProfileUrl: e.target.value })}
-                      placeholder="https://stacked.com/creator-name"
-                    />
+                    <label className="block text-sm font-medium mb-2">Initial Phase</label>
+                    <Select
+                      value={editForm.phaseNumber?.toString() || '0'}
+                      onValueChange={(value) => setEditForm({ ...editForm, phaseNumber: parseInt(value, 10) })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select phase" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {phases.map((phase) => (
+                          <SelectItem key={phase.id} value={phase.id.toString()}>
+                            {phase.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 
@@ -557,49 +615,79 @@ export default function CreatorManagement({
                   />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">Social Media</label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="flex items-center space-x-2">
+                      <InstagramIcon className="w-4 h-4" />
+                      <Input
+                        value={editForm.socialMedia?.instagram || ''}
+                        onChange={(e) => setEditForm({
+                          ...editForm,
+                          socialMedia: { ...editForm.socialMedia, instagram: e.target.value }
+                        })}
+                        placeholder="Instagram handle or URL"
+                      />
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <TwitterIcon className="w-4 h-4" />
+                      <Input
+                        value={editForm.socialMedia?.twitter || ''}
+                        onChange={(e) => setEditForm({
+                          ...editForm,
+                          socialMedia: { ...editForm.socialMedia, twitter: e.target.value }
+                        })}
+                        placeholder="Twitter handle or URL"
+                      />
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <YouTubeIcon className="w-4 h-4" />
+                      <Input
+                        value={editForm.socialMedia?.youtube || ''}
+                        onChange={(e) => setEditForm({
+                          ...editForm,
+                          socialMedia: { ...editForm.socialMedia, youtube: e.target.value }
+                        })}
+                        placeholder="YouTube handle or URL"
+                      />
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <MessageSquare className="w-4 h-4" />
+                      <Input
+                        value={editForm.socialMedia?.tiktok || ''}
+                        onChange={(e) => setEditForm({
+                          ...editForm,
+                          socialMedia: { ...editForm.socialMedia, tiktok: e.target.value }
+                        })}
+                        placeholder="TikTok handle or URL"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-sm font-medium mb-2">Instagram</label>
+                    <label className="block text-sm font-medium mb-2">Card Price ($)</label>
                     <Input
-                      value={editForm.socialMedia?.instagram || ''}
-                      onChange={(e) => setEditForm({
-                        ...editForm,
-                        socialMedia: { ...editForm.socialMedia, instagram: e.target.value }
-                      })}
-                      placeholder="@username or full URL"
+                      type="number"
+                      value={editForm.cardPrice || 100}
+                      onChange={(e) => setEditForm({ ...editForm, cardPrice: parseInt(e.target.value, 10) })}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-2">Twitter</label>
+                    <label className="block text-sm font-medium mb-2">Total Cards</label>
                     <Input
-                      value={editForm.socialMedia?.twitter || ''}
-                      onChange={(e) => setEditForm({
-                        ...editForm,
-                        socialMedia: { ...editForm.socialMedia, twitter: e.target.value }
-                      })}
-                      placeholder="@username or full URL"
+                      type="number"
+                      value={editForm.totalCards || 100}
+                      onChange={(e) => setEditForm({ ...editForm, totalCards: parseInt(e.target.value, 10) })}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-2">YouTube</label>
+                    <label className="block text-sm font-medium mb-2">Cards Sold</label>
                     <Input
-                      value={editForm.socialMedia?.youtube || ''}
-                      onChange={(e) => setEditForm({
-                        ...editForm,
-                        socialMedia: { ...editForm.socialMedia, youtube: e.target.value }
-                      })}
-                      placeholder="@channel or full URL"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2">TikTok</label>
-                    <Input
-                      value={editForm.socialMedia?.tiktok || ''}
-                      onChange={(e) => setEditForm({
-                        ...editForm,
-                        socialMedia: { ...editForm.socialMedia, tiktok: e.target.value }
-                      })}
-                      placeholder="@username or full URL"
+                      type="number"
+                      value={editForm.cardsSold || 0}
+                      onChange={(e) => setEditForm({ ...editForm, cardsSold: parseInt(e.target.value, 10) })}
                     />
                   </div>
                 </div>
@@ -616,57 +704,63 @@ export default function CreatorManagement({
               </CardContent>
             </Card>
           ) : selectedCreator ? (
-            <Tabs defaultValue="overview" className="space-y-6">
-              <TabsList className="grid w-full grid-cols-4 h-12">
-                <TabsTrigger value="overview" className="text-sm">Overview</TabsTrigger>
-                <TabsTrigger value="assets" className="text-sm">Assets</TabsTrigger>
-                <TabsTrigger value="phases" className="text-sm">Phases</TabsTrigger>
-                <TabsTrigger value="strategy" className="text-sm">Strategy</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="overview">
-                <Card>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <span className="text-3xl">{selectedCreator.avatar}</span>
-                        <div>
-                          <CardTitle className="text-2xl">{selectedCreator.name}</CardTitle>
-                          <div className="flex items-center space-x-2 mt-1">
-                            <Badge className={getCategoryColor(selectedCreator.category)}>
-                              {selectedCreator.category}
-                            </Badge>
-                            <span className="text-sm text-gray-600">
-                              {getRegionDisplay(selectedCreator.region)}
-                            </span>
-                          </div>
-                        </div>
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="text-3xl">{selectedCreator.avatar}</div>
+                    <div>
+                      <CardTitle className="text-2xl">{selectedCreator.name}</CardTitle>
+                      <div className="flex items-center space-x-2 mt-1">
+                        <Badge variant="outline">
+                          {selectedCreator.category}
+                        </Badge>
+                        <Badge variant="outline">
+                          {selectedCreator.region}
+                        </Badge>
                       </div>
-                      <div className="flex space-x-2">
-                        {selectedCreator.stackedProfileUrl && (
-                          <Button variant="outline" size="sm" asChild>
-                            <a href={selectedCreator.stackedProfileUrl} target="_blank" rel="noopener noreferrer">
-                              <Globe className="w-4 h-4 mr-2" />
-                              View Profile
-                            </a>
-                          </Button>
-                        )}
-                        <Button variant="outline" size="sm" onClick={() => startEditing(selectedCreator)}>
+                    </div>
+                  </div>
+                  <div className="flex space-x-2">
+                    {isEditing ? (
+                      <>
+                        <Button onClick={handleUpdateCreator} disabled={!editForm.name || !editForm.category}>
+                          <Save className="w-4 h-4 mr-2" />
+                          Save
+                        </Button>
+                        <Button variant="outline" onClick={cancelEditing}>
+                          Cancel
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button variant="outline" onClick={startEditing}>
                           <Edit className="w-4 h-4 mr-2" />
                           Edit
                         </Button>
                         <Button
                           variant="outline"
-                          size="sm"
                           onClick={() => handleDeleteCreator(selectedCreator.id)}
                           className="text-red-600 hover:text-red-700"
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
+                      </>
+                    )}
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+                  <TabsList>
+                    <TabsTrigger value="info">Basic Info</TabsTrigger>
+                    <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
+                    <TabsTrigger value="social">Social Media</TabsTrigger>
+                    <TabsTrigger value="assets">Assets</TabsTrigger>
+                    <TabsTrigger value="phases">Phase Management</TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="info">
                     {isEditing ? (
                       <div className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -675,13 +769,6 @@ export default function CreatorManagement({
                             <Input
                               value={editForm.name || ''}
                               onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Avatar</label>
-                            <Input
-                              value={editForm.avatar || ''}
-                              onChange={(e) => setEditForm({ ...editForm, avatar: e.target.value })}
                             />
                           </div>
                           <div>
@@ -694,29 +781,9 @@ export default function CreatorManagement({
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                {getCategoryNames().map((category) => (
+                                {uniqueCategories.map((category) => (
                                   <SelectItem key={category} value={category}>
-                                    <Badge className={`text-xs ${getCategoryColor(category)}`}>
-                                      {category}
-                                    </Badge>
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Region</label>
-                            <Select
-                              value={editForm.region || ''}
-                              onValueChange={(value) => setEditForm({ ...editForm, region: value })}
-                            >
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {regions.map((region) => (
-                                  <SelectItem key={region.value} value={region.value}>
-                                    {region.flag} {region.label}
+                                    {category}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
@@ -738,79 +805,29 @@ export default function CreatorManagement({
                             />
                           </div>
                           <div>
-                            <label className="block text-sm font-medium mb-2">Card Price</label>
-                            <Input
-                              type="number"
-                              value={editForm.cardPrice || 0}
-                              onChange={(e) => setEditForm({ ...editForm, cardPrice: Number(e.target.value) })}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Sales Velocity</label>
+                            <label className="block text-sm font-medium mb-2">Region</label>
                             <Select
-                              value={editForm.salesVelocity || ''}
-                              onValueChange={(value) => setEditForm({ ...editForm, salesVelocity: value })}
+                              value={editForm.region || 'US'}
+                              onValueChange={(value) => setEditForm({ ...editForm, region: value })}
                             >
                               <SelectTrigger>
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                {salesVelocityOptions.map((velocity) => (
-                                  <SelectItem key={velocity} value={velocity}>
-                                    {velocity}
+                                {regions.map((region) => (
+                                  <SelectItem key={region} value={region}>
+                                    {region}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
                           </div>
                           <div>
-                            <label className="block text-sm font-medium mb-2">Cards Sold</label>
+                            <label className="block text-sm font-medium mb-2">Avatar</label>
                             <Input
-                              type="number"
-                              value={editForm.cardsSold || 0}
-                              onChange={(e) => setEditForm({ ...editForm, cardsSold: Number(e.target.value) })}
-                              max={editForm.totalCards || 100}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Current Phase</label>
-                            <Select
-                              value={editForm.phaseNumber?.toString() || ''}
-                              onValueChange={(value) => {
-                                const phaseNumber = Number(value)
-                                const phase = phases.find(p => p.number === phaseNumber)
-                                if (phase) {
-                                  setEditForm({ 
-                                    ...editForm, 
-                                    phaseNumber,
-                                    phase: phase.name,
-                                    daysInPhase: 0 // Reset days when changing phase
-                                  })
-                                }
-                              }}
-                            >
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {phases.map((phase) => (
-                                  <SelectItem key={phase.number} value={phase.number.toString()}>
-                                    <div className="flex items-center space-x-2">
-                                      <Badge className={phase.color}>
-                                        {phase.name}
-                                      </Badge>
-                                    </div>
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Stacked Profile URL</label>
-                            <Input
-                              value={editForm.stackedProfileUrl || ''}
-                              onChange={(e) => setEditForm({ ...editForm, stackedProfileUrl: e.target.value })}
-                              placeholder="https://stacked.com/creator-name"
+                              value={editForm.avatar || ''}
+                              onChange={(e) => setEditForm({ ...editForm, avatar: e.target.value })}
+                              placeholder="Emoji or image URL"
                             />
                           </div>
                         </div>
@@ -823,383 +840,452 @@ export default function CreatorManagement({
                             rows={3}
                           />
                         </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <ProfilePictureUpload
+                            currentAvatar={selectedCreator.avatar}
+                            onAvatarUpdate={handleAvatarUpdate}
+                            creatorName={selectedCreator.name}
+                          />
+                          
+                          <div className="space-y-4">
+                            <div>
+                              <h3 className="text-lg font-semibold mb-2">Contact Information</h3>
+                              <div className="space-y-2">
+                                <div className="flex items-center space-x-2">
+                                  <Mail className="w-4 h-4 text-gray-500" />
+                                  <span>{selectedCreator.email || 'No email provided'}</span>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <Phone className="w-4 h-4 text-gray-500" />
+                                  <span>{selectedCreator.phone || 'No phone provided'}</span>
+                                </div>
+                              </div>
+                            </div>
 
+                            <div>
+                              <h3 className="text-lg font-semibold mb-2">Creator Details</h3>
+                              <div className="space-y-2">
+                                <div className="flex items-center space-x-2">
+                                  <User className="w-4 h-4 text-gray-500" />
+                                  <span>Category: {selectedCreator.category}</span>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <Calendar className="w-4 h-4 text-gray-500" />
+                                  <span>Added: {selectedCreator.createdAt}</span>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <Clock className="w-4 h-4 text-gray-500" />
+                                  <span>Last Updated: {selectedCreator.lastUpdated}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {selectedCreator.bio && (
+                          <div>
+                            <h3 className="text-lg font-semibold mb-2">Bio</h3>
+                            <p className="text-gray-700">{selectedCreator.bio}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="pipeline">
+                    {isEditing ? (
+                      <div className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
-                            <label className="block text-sm font-medium mb-2">Instagram</label>
+                            <label className="block text-sm font-medium mb-2">Phase</label>
+                            <Select
+                              value={editForm.phaseNumber?.toString() || selectedCreator.phaseNumber.toString()}
+                              onValueChange={(value) => setEditForm({ ...editForm, phaseNumber: parseInt(value, 10) })}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {phases.map((phase) => (
+                                  <SelectItem key={phase.id} value={phase.id.toString()}>
+                                    {phase.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Sales Velocity</label>
+                            <Select
+                              value={editForm.salesVelocity || selectedCreator.salesVelocity}
+                              onValueChange={(value) => setEditForm({ ...editForm, salesVelocity: value })}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {velocities.map((velocity) => (
+                                  <SelectItem key={velocity.id} value={velocity.id}>
+                                    {velocity.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Days in Phase</label>
                             <Input
-                              value={editForm.socialMedia?.instagram || ''}
-                              onChange={(e) => setEditForm({
-                                ...editForm,
-                                socialMedia: { ...editForm.socialMedia, instagram: e.target.value }
-                              })}
+                              type="number"
+                              value={editForm.daysInPhase !== undefined ? editForm.daysInPhase : selectedCreator.daysInPhase}
+                              onChange={(e) => setEditForm({ ...editForm, daysInPhase: parseInt(e.target.value, 10) })}
                             />
                           </div>
                           <div>
-                            <label className="block text-sm font-medium mb-2">Twitter</label>
+                            <label className="block text-sm font-medium mb-2">Next Task</label>
                             <Input
-                              value={editForm.socialMedia?.twitter || ''}
-                              onChange={(e) => setEditForm({
-                                ...editForm,
-                                socialMedia: { ...editForm.socialMedia, twitter: e.target.value }
-                              })}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">YouTube</label>
-                            <Input
-                              value={editForm.socialMedia?.youtube || ''}
-                              onChange={(e) => setEditForm({
-                                ...editForm,
-                                socialMedia: { ...editForm.socialMedia, youtube: e.target.value }
-                              })}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">TikTok</label>
-                            <Input
-                              value={editForm.socialMedia?.tiktok || ''}
-                              onChange={(e) => setEditForm({
-                                ...editForm,
-                                socialMedia: { ...editForm.socialMedia, tiktok: e.target.value }
-                              })}
+                              value={editForm.nextTask || selectedCreator.nextTask}
+                              onChange={(e) => setEditForm({ ...editForm, nextTask: e.target.value })}
                             />
                           </div>
                         </div>
 
-                        <div className="flex space-x-3">
-                          <Button onClick={handleUpdateCreator}>
-                            <Save className="w-4 h-4 mr-2" />
-                            Save Changes
-                          </Button>
-                          <Button variant="outline" onClick={cancelEditing}>
-                            Cancel
-                          </Button>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Cards Sold</label>
+                            <Input
+                              type="number"
+                              value={editForm.cardsSold !== undefined ? editForm.cardsSold : selectedCreator.cardsSold}
+                              onChange={(e) => setEditForm({ ...editForm, cardsSold: parseInt(e.target.value, 10) })}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Total Cards</label>
+                            <Input
+                              type="number"
+                              value={editForm.totalCards || selectedCreator.totalCards}
+                              onChange={(e) => setEditForm({ ...editForm, totalCards: parseInt(e.target.value, 10) })}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Card Price ($)</label>
+                            <Input
+                              type="number"
+                              value={editForm.cardPrice || selectedCreator.cardPrice}
+                              onChange={(e) => setEditForm({ ...editForm, cardPrice: parseInt(e.target.value, 10) })}
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Launch Date</label>
+                          <Input
+                            type="date"
+                            value={editForm.strategy?.launchDate || selectedCreator.strategy.launchDate || ''}
+                            onChange={(e) => setEditForm({
+                              ...editForm,
+                              strategy: { ...editForm.strategy, launchDate: e.target.value }
+                            })}
+                          />
                         </div>
                       </div>
                     ) : (
                       <div className="space-y-6">
-                        {/* Performance Metrics */}
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                          <div className="bg-blue-50 p-4 rounded-lg">
-                            <div className="flex items-center">
-                              <Target className="w-5 h-5 text-blue-600 mr-2" />
-                              <span className="text-sm font-medium">Cards Sold</span>
-                            </div>
-                            <p className="text-2xl font-bold text-blue-600 mt-1">
-                              {selectedCreator.cardsSold}/{selectedCreator.totalCards}
-                            </p>
-                            <p className="text-xs text-blue-600">
-                              {Math.round((selectedCreator.cardsSold / selectedCreator.totalCards) * 100)}% complete
-                            </p>
-                          </div>
-                          <div className="bg-green-50 p-4 rounded-lg">
-                            <div className="flex items-center">
-                              <DollarSign className="w-5 h-5 text-green-600 mr-2" />
-                              <span className="text-sm font-medium">Revenue</span>
-                            </div>
-                            <p className="text-2xl font-bold text-green-600 mt-1">
-                              ${(selectedCreator.cardsSold * selectedCreator.cardPrice).toLocaleString()}
-                            </p>
-                            <p className="text-xs text-green-600">${selectedCreator.cardPrice} per card</p>
-                          </div>
-                          <div className="bg-orange-50 p-4 rounded-lg">
-                            <div className="flex items-center">
-                              <TrendingUp className="w-5 h-5 text-orange-600 mr-2" />
-                              <span className="text-sm font-medium">Velocity</span>
-                            </div>
-                            <p className="text-2xl font-bold text-orange-600 mt-1">{selectedCreator.salesVelocity}</p>
-                            <p className="text-xs text-orange-600">Sales performance</p>
-                          </div>
-                          <div className="bg-purple-50 p-4 rounded-lg">
-                            <div className="flex items-center">
-                              <Calendar className="w-5 h-5 text-purple-600 mr-2" />
-                              <span className="text-sm font-medium">Phase</span>
-                            </div>
-                            <p className="text-lg font-bold text-purple-600 mt-1">{selectedCreator.phaseNumber}</p>
-                            <p className="text-xs text-purple-600">{selectedCreator.daysInPhase} days</p>
-                          </div>
-                        </div>
-
-                        {/* Phase Management */}
-                        <div>
-                          <h3 className="text-lg font-semibold mb-3">Phase Management</h3>
-                          <div className="flex items-center space-x-4 p-4 bg-gray-50 rounded-lg">
-                            <div className="flex-1">
-                              <div className="flex items-center space-x-2 mb-1">
-                                <Badge className={phases.find(p => p.number === selectedCreator.phaseNumber)?.color}>
-                                  {selectedCreator.phase}
-                                </Badge>
-                                <span className="text-sm text-gray-600">
-                                  Day {selectedCreator.daysInPhase}
-                                </span>
-                              </div>
-                              <p className="text-sm text-gray-600">
-                                Next task: {selectedCreator.nextTask}
-                              </p>
-                            </div>
-                            <div className="flex space-x-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handlePhaseChange(selectedCreator.id, Math.max(0, selectedCreator.phaseNumber - 1))}
-                                disabled={selectedCreator.phaseNumber === 0}
-                                title="Move to previous phase"
-                              >
-                                <ArrowUp className="w-4 h-4" />
-                                Previous
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handlePhaseChange(selectedCreator.id, Math.min(4, selectedCreator.phaseNumber + 1))}
-                                disabled={selectedCreator.phaseNumber === 4}
-                                title="Move to next phase"
-                              >
-                                Next
-                                <ArrowDown className="w-4 h-4 ml-1" />
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Contact Information */}
-                        <div>
-                          <h3 className="text-lg font-semibold mb-3">Contact Information</h3>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="flex items-center space-x-3">
-                              <Mail className="w-4 h-4 text-gray-500" />
-                              <span className="text-sm">{selectedCreator.email || 'No email provided'}</span>
-                            </div>
-                            <div className="flex items-center space-x-3">
-                              <Phone className="w-4 h-4 text-gray-500" />
-                              <span className="text-sm">{selectedCreator.phone || 'No phone provided'}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Bio */}
-                        {selectedCreator.bio && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <div>
-                            <h3 className="text-lg font-semibold mb-3">Bio</h3>
-                            <p className="text-gray-700">{selectedCreator.bio}</p>
+                            <h3 className="text-lg font-semibold mb-3">Pipeline Status</h3>
+                            <div className="space-y-4">
+                              <div>
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-sm text-gray-600">Current Phase</span>
+                                  <Badge className={getPhaseColor(selectedCreator.phaseNumber)}>
+                                    {selectedCreator.phase}
+                                  </Badge>
+                                </div>
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-sm text-gray-600">Days in Phase</span>
+                                  <span className="font-medium">{selectedCreator.daysInPhase}</span>
+                                </div>
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-sm text-gray-600">Sales Velocity</span>
+                                  <Badge className={getVelocityColor(selectedCreator.salesVelocity)}>
+                                    {selectedCreator.salesVelocity}
+                                  </Badge>
+                                </div>
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-sm text-gray-600">Next Task</span>
+                                  <span className="font-medium">{selectedCreator.nextTask}</span>
+                                </div>
+                              </div>
+                            </div>
                           </div>
-                        )}
 
-                        {/* Social Media */}
-                        <div>
-                          <h3 className="text-lg font-semibold mb-3">Social Media</h3>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            {selectedCreator.socialMedia.instagram && (
-                              <a
-                                href={selectedCreator.socialMedia.instagram.startsWith('http') 
-                                  ? selectedCreator.socialMedia.instagram 
-                                  : `https://instagram.com/${selectedCreator.socialMedia.instagram.replace('@', '')}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center space-x-2 p-2 border rounded hover:bg-gray-50"
-                              >
-                                <div className="w-4 h-4 bg-gradient-to-r from-purple-500 to-pink-500 rounded" />
-                                <span className="text-sm">Instagram</span>
-                              </a>
-                            )}
-                            {selectedCreator.socialMedia.twitter && (
-                              <a
-                                href={selectedCreator.socialMedia.twitter.startsWith('http') 
-                                  ? selectedCreator.socialMedia.twitter 
-                                  : `https://twitter.com/${selectedCreator.socialMedia.twitter.replace('@', '')}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center space-x-2 p-2 border rounded hover:bg-gray-50"
-                              >
-                                <div className="w-4 h-4 bg-blue-500 rounded" />
-                                <span className="text-sm">Twitter</span>
-                              </a>
-                            )}
-                            {selectedCreator.socialMedia.youtube && (
-                              <a
-                                href={selectedCreator.socialMedia.youtube.startsWith('http') 
-                                  ? selectedCreator.socialMedia.youtube 
-                                  : `https://youtube.com/${selectedCreator.socialMedia.youtube.replace('@', '')}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center space-x-2 p-2 border rounded hover:bg-gray-50"
-                              >
-                                <div className="w-4 h-4 bg-red-500 rounded" />
-                                <span className="text-sm">YouTube</span>
-                              </a>
-                            )}
-                            {selectedCreator.socialMedia.tiktok && (
-                              <a
-                                href={selectedCreator.socialMedia.tiktok.startsWith('http') 
-                                  ? selectedCreator.socialMedia.tiktok 
-                                  : `https://tiktok.com/@${selectedCreator.socialMedia.tiktok.replace('@', '')}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center space-x-2 p-2 border rounded hover:bg-gray-50"
-                              >
-                                <div className="w-4 h-4 bg-black rounded" />
-                                <span className="text-sm">TikTok</span>
-                              </a>
-                            )}
+                          <div>
+                            <h3 className="text-lg font-semibold mb-3">Sales Performance</h3>
+                            <div className="space-y-4">
+                              <div>
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-sm text-gray-600">Cards Sold</span>
+                                  <span className="font-medium">{selectedCreator.cardsSold}/{selectedCreator.totalCards}</span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                  <div
+                                    className="bg-blue-600 h-2.5 rounded-full"
+                                    style={{ width: `${(selectedCreator.cardsSold / selectedCreator.totalCards) * 100}%` }}
+                                  ></div>
+                                </div>
+                              </div>
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-sm text-gray-600">Card Price</span>
+                                <span className="font-medium">${selectedCreator.cardPrice}</span>
+                              </div>
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-sm text-gray-600">Total Revenue</span>
+                                <span className="font-medium">${selectedCreator.cardsSold * selectedCreator.cardPrice}</span>
+                              </div>
+                              {selectedCreator.strategy.launchDate && (
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-sm text-gray-600">Launch Date</span>
+                                  <span className="font-medium">{selectedCreator.strategy.launchDate}</span>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
 
-                        {/* Current Task */}
                         <div>
-                          <h3 className="text-lg font-semibold mb-3">Current Task</h3>
-                          <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                            <p className="font-medium">{selectedCreator.nextTask}</p>
-                            <p className="text-sm text-gray-600 mt-1">
-                              {selectedCreator.phase} • Day {selectedCreator.daysInPhase}
-                            </p>
+                          <h3 className="text-lg font-semibold mb-3">Strategy</h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {selectedCreator.strategy.targetAudience && (
+                              <div>
+                                <h4 className="font-medium text-sm mb-1">Target Audience</h4>
+                                <p className="text-sm text-gray-700">{selectedCreator.strategy.targetAudience}</p>
+                              </div>
+                            )}
+                            {selectedCreator.strategy.contentPlan && (
+                              <div>
+                                <h4 className="font-medium text-sm mb-1">Content Plan</h4>
+                                <p className="text-sm text-gray-700">{selectedCreator.strategy.contentPlan}</p>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
                     )}
-                  </CardContent>
-                </Card>
-              </TabsContent>
+                  </TabsContent>
 
-              <TabsContent value="assets">
-                <div className="space-y-6">
-                  <AssetUpload
-                    creatorId={selectedCreator.id}
-                    assetType="profileImages"
-                    existingAssets={selectedCreator.assets.profileImages}
-                    onAssetsUpdate={(assets) => handleAssetsUpdate('profileImages', assets)}
-                  />
-                  <AssetUpload
-                    creatorId={selectedCreator.id}
-                    assetType="videos"
-                    existingAssets={selectedCreator.assets.videos}
-                    onAssetsUpdate={(assets) => handleAssetsUpdate('videos', assets)}
-                  />
-                  <AssetUpload
-                    creatorId={selectedCreator.id}
-                    assetType="pressKit"
-                    existingAssets={selectedCreator.assets.pressKit}
-                    onAssetsUpdate={(assets) => handleAssetsUpdate('pressKit', assets)}
-                  />
-                </div>
-              </TabsContent>
+                  <TabsContent value="social">
+                    {isEditing ? (
+                      <div className="space-y-6">
+                        <div className="grid grid-cols-1 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Instagram</label>
+                            <div className="flex items-center space-x-2">
+                              <InstagramIcon className="w-4 h-4" />
+                              <Input
+                                value={editForm.socialMedia?.instagram || ''}
+                                onChange={(e) => setEditForm({
+                                  ...editForm,
+                                  socialMedia: { ...editForm.socialMedia, instagram: e.target.value }
+                                })}
+                                placeholder="@username or URL"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Twitter</label>
+                            <div className="flex items-center space-x-2">
+                              <TwitterIcon className="w-4 h-4" />
+                              <Input
+                                value={editForm.socialMedia?.twitter || ''}
+                                onChange={(e) => setEditForm({
+                                  ...editForm,
+                                  socialMedia: { ...editForm.socialMedia, twitter: e.target.value }
+                                })}
+                                placeholder="@username or URL"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-2">YouTube</label>
+                            <div className="flex items-center space-x-2">
+                              <YouTubeIcon className="w-4 h-4" />
+                              <Input
+                                value={editForm.socialMedia?.youtube || ''}
+                                onChange={(e) => setEditForm({
+                                  ...editForm,
+                                  socialMedia: { ...editForm.socialMedia, youtube: e.target.value }
+                                })}
+                                placeholder="@channel or URL"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-2">TikTok</label>
+                            <div className="flex items-center space-x-2">
+                              <MessageSquare className="w-4 h-4" />
+                              <Input
+                                value={editForm.socialMedia?.tiktok || ''}
+                                onChange={(e) => setEditForm({
+                                  ...editForm,
+                                  socialMedia: { ...editForm.socialMedia, tiktok: e.target.value }
+                                })}
+                                placeholder="@username or URL"
+                              />
+                            </div>
+                          </div>
+                        </div>
 
-              <TabsContent value="phases">
-                <PhaseManager
-                  creatorId={selectedCreator.id}
-                  creatorName={selectedCreator.name}
-                  currentPhase={selectedCreator.phaseNumber}
-                  onPhaseUpdate={(phases) => {
-                    // Handle phase updates if needed
-                    console.log('Phase updated:', phases)
-                  }}
-                />
-              </TabsContent>
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Target Audience</label>
+                          <Textarea
+                            value={editForm.strategy?.targetAudience || ''}
+                            onChange={(e) => setEditForm({
+                              ...editForm,
+                              strategy: { ...editForm.strategy, targetAudience: e.target.value }
+                            })}
+                            placeholder="Describe the creator's target audience"
+                            rows={2}
+                          />
+                        </div>
 
-              <TabsContent value="strategy">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Strategy & Planning</CardTitle>
-                    <CardDescription>Launch strategy and planning details</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Launch Date</label>
-                      <Input
-                        type="date"
-                        value={selectedCreator.strategy.launchDate || ''}
-                        onChange={(e) => {
-                          const updatedCreator = {
-                            ...selectedCreator,
-                            strategy: { ...selectedCreator.strategy, launchDate: e.target.value }
-                          }
-                          
-                          // Update in cloud storage
-                          if (isCloudConnected) {
-                            updateCreatorInCloud(selectedCreator.id, {
-                              strategy: { ...selectedCreator.strategy, launchDate: e.target.value }
-                            })
-                          } else {
-                            // Local update only
-                            const updatedCreators = creators.map(c => c.id === selectedCreator.id ? updatedCreator : c)
-                            onCreatorsUpdate(updatedCreators)
-                            setSelectedCreator(updatedCreator)
-                          }
-                        }}
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Content Plan</label>
+                          <Textarea
+                            value={editForm.strategy?.contentPlan || ''}
+                            onChange={(e) => setEditForm({
+                              ...editForm,
+                              strategy: { ...editForm.strategy, contentPlan: e.target.value }
+                            })}
+                            placeholder="Outline the content strategy"
+                            rows={2}
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <h3 className="text-lg font-semibold mb-3">Social Media Profiles</h3>
+                            <div className="space-y-3">
+                              <div className="flex items-center space-x-2">
+                                <InstagramIcon className="w-5 h-5" />
+                                <span className="text-sm">
+                                  {selectedCreator.socialMedia.instagram || 'Not provided'}
+                                </span>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <TwitterIcon className="w-5 h-5" />
+                                <span className="text-sm">
+                                  {selectedCreator.socialMedia.twitter || 'Not provided'}
+                                </span>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <YouTubeIcon className="w-5 h-5" />
+                                <span className="text-sm">
+                                  {selectedCreator.socialMedia.youtube || 'Not provided'}
+                                </span>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <MessageSquare className="w-5 h-5" />
+                                <span className="text-sm">
+                                  {selectedCreator.socialMedia.tiktok || 'Not provided'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div>
+                            <h3 className="text-lg font-semibold mb-3">Strategy</h3>
+                            <div className="space-y-3">
+                              {selectedCreator.strategy.targetAudience && (
+                                <div>
+                                  <h4 className="font-medium text-sm mb-1">Target Audience</h4>
+                                  <p className="text-sm text-gray-700">{selectedCreator.strategy.targetAudience}</p>
+                                </div>
+                              )}
+                              {selectedCreator.strategy.contentPlan && (
+                                <div>
+                                  <h4 className="font-medium text-sm mb-1">Content Plan</h4>
+                                  <p className="text-sm text-gray-700">{selectedCreator.strategy.contentPlan}</p>
+                                </div>
+                              )}
+                              {!selectedCreator.strategy.targetAudience && !selectedCreator.strategy.contentPlan && (
+                                <p className="text-sm text-gray-500">No strategy information provided yet.</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="assets">
+                    <div className="space-y-6">
+                      <AssetUpload
+                        creatorId={selectedCreator.id}
+                        assetType="profileImages"
+                        existingAssets={selectedCreator.assets.profileImages}
+                        onAssetsUpdate={(assets) => handleAssetsUpdate('profileImages', assets)}
+                      />
+                      
+                      <AssetUpload
+                        creatorId={selectedCreator.id}
+                        assetType="videos"
+                        existingAssets={selectedCreator.assets.videos}
+                        onAssetsUpdate={(assets) => handleAssetsUpdate('videos', assets)}
+                      />
+                      
+                      <AssetUpload
+                        creatorId={selectedCreator.id}
+                        assetType="pressKit"
+                        existingAssets={selectedCreator.assets.pressKit}
+                        onAssetsUpdate={(assets) => handleAssetsUpdate('pressKit', assets)}
                       />
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Target Audience</label>
-                      <Textarea
-                        value={selectedCreator.strategy.targetAudience || ''}
-                        onChange={(e) => {
-                          const updatedCreator = {
-                            ...selectedCreator,
-                            strategy: { ...selectedCreator.strategy, targetAudience: e.target.value }
-                          }
-                          
-                          // Update in cloud storage
-                          if (isCloudConnected) {
-                            updateCreatorInCloud(selectedCreator.id, {
-                              strategy: { ...selectedCreator.strategy, targetAudience: e.target.value }
-                            })
-                          } else {
-                            // Local update only
-                            const updatedCreators = creators.map(c => c.id === selectedCreator.id ? updatedCreator : c)
-                            onCreatorsUpdate(updatedCreators)
-                            setSelectedCreator(updatedCreator)
-                          }
-                        }}
-                        placeholder="Describe the target audience for this creator"
-                        rows={3}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Content Plan</label>
-                      <Textarea
-                        value={selectedCreator.strategy.contentPlan || ''}
-                        onChange={(e) => {
-                          const updatedCreator = {
-                            ...selectedCreator,
-                            strategy: { ...selectedCreator.strategy, contentPlan: e.target.value }
-                          }
-                          
-                          // Update in cloud storage
-                          if (isCloudConnected) {
-                            updateCreatorInCloud(selectedCreator.id, {
-                              strategy: { ...selectedCreator.strategy, contentPlan: e.target.value }
-                            })
-                          } else {
-                            // Local update only
-                            const updatedCreators = creators.map(c => c.id === selectedCreator.id ? updatedCreator : c)
-                            onCreatorsUpdate(updatedCreators)
-                            setSelectedCreator(updatedCreator)
-                          }
-                        }}
-                        placeholder="Outline the content strategy and plan"
-                        rows={4}
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            </Tabs>
-          ) : (
+                  </TabsContent>
+
+                  <TabsContent value="phases">
+                    <PhaseManager
+                      creatorId={selectedCreator.id}
+                      creatorName={selectedCreator.name}
+                      currentPhase={selectedCreator.phaseNumber}
+                      onPhaseUpdate={handlePhaseUpdate}
+                    />
+                  </TabsContent>
+                </Tabs>
+              </CardContent>
+            </Card>
+          ) : !isCreating && filteredCreators.length === 0 ? (
+            <Card>
+              <CardContent className="text-center py-12">
+                <User className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-500 mb-4">No creators found matching your criteria</p>
+                <Button onClick={() => setIsCreating(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Creator
+                </Button>
+              </CardContent>
+            </Card>
+          ) : !isCreating ? (
             <Card>
               <CardContent className="text-center py-12">
                 <User className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-500">Select a creator to view details</p>
               </CardContent>
             </Card>
-          )}
+          ) : null}
         </div>
       </div>
 
-      {/* Category Manager Modal */}
-      <CategoryManager
-        isOpen={showCategoryManager}
-        onClose={() => setShowCategoryManager(false)}
-      />
+      {showCategoryManager && (
+        <CategoryManager
+          isOpen={showCategoryManager}
+          onClose={() => setShowCategoryManager(false)}
+        />
+      )}
     </div>
   )
 }

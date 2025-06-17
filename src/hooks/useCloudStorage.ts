@@ -6,15 +6,117 @@ import {
   convertDatabaseToCreator,
   convertContentToDatabase,
   convertDatabaseToContent,
-  initializeDatabase
+  initializeDatabase,
+  testSupabaseConnection
 } from '@/lib/supabase'
 import { useToast } from '@/components/ui/toast'
+
+// Default demo data
+const defaultCreators = [
+  {
+    id: 1,
+    name: "Kurama",
+    email: "kurama@example.com",
+    phone: "+1 (555) 123-4567",
+    category: "Gaming",
+    region: "US",
+    phase: "Phase 2: Launch Week",
+    phaseNumber: 2,
+    cardsSold: 67,
+    totalCards: 100,
+    cardPrice: 100,
+    daysInPhase: 2,
+    nextTask: "Post group chat screenshot",
+    salesVelocity: "High",
+    avatar: "🎮",
+    bio: "Top Smash Bros player with 500K+ following",
+    socialMedia: {
+      instagram: "@kurama_smash",
+      twitter: "@KuramaPlays",
+      youtube: "@KuramaGaming",
+      tiktok: "@kurama.gaming"
+    },
+    assets: { profileImages: [], videos: [], pressKit: [] },
+    strategy: {
+      launchDate: "2025-06-20",
+      targetAudience: "Competitive gaming fans",
+      contentPlan: "Daily gameplay tips"
+    },
+    stackedProfileUrl: "https://stacked.com/kurama",
+    createdAt: "2025-06-10",
+    lastUpdated: "2025-06-16"
+  },
+  {
+    id: 2,
+    name: "Nina Lin",
+    email: "nina@example.com",
+    phone: "+1 (555) 234-5678",
+    category: "Streaming",
+    region: "US",
+    phase: "Phase 1: Drop Prep",
+    phaseNumber: 1,
+    cardsSold: 0,
+    totalCards: 100,
+    cardPrice: 75,
+    daysInPhase: 5,
+    nextTask: "Record teaser video",
+    salesVelocity: "Pending",
+    avatar: "📺",
+    bio: "Popular streamer and co-founder",
+    socialMedia: {
+      instagram: "@ninalin",
+      twitter: "@NinaStreams",
+      tiktok: "@nina.streams"
+    },
+    assets: { profileImages: [], videos: [], pressKit: [] },
+    strategy: {
+      launchDate: "2025-06-25",
+      targetAudience: "Streaming community",
+      contentPlan: "Stream highlights"
+    },
+    stackedProfileUrl: "https://stacked.com/nina-lin",
+    createdAt: "2025-06-12",
+    lastUpdated: "2025-06-16"
+  },
+  {
+    id: 3,
+    name: "Edward So",
+    email: "edward@example.com",
+    phone: "+1 (555) 345-6789",
+    category: "Music",
+    region: "Brazil",
+    phase: "Phase 3: Sell-Out Push",
+    phaseNumber: 3,
+    cardsSold: 85,
+    totalCards: 100,
+    cardPrice: 90,
+    daysInPhase: 1,
+    nextTask: "Post 'only 15 left' story",
+    salesVelocity: "Medium",
+    avatar: "🎵",
+    bio: "DJ and creative entrepreneur",
+    socialMedia: {
+      instagram: "@edwardso",
+      twitter: "@EdwardSoMusic",
+      tiktok: "@edward.djmusic"
+    },
+    assets: { profileImages: [], videos: [], pressKit: [] },
+    strategy: {
+      launchDate: "2025-06-18",
+      targetAudience: "Music fans",
+      contentPlan: "Live sets and remixes"
+    },
+    stackedProfileUrl: "https://stacked.com/edward-so",
+    createdAt: "2025-06-08",
+    lastUpdated: "2025-06-16"
+  }
+]
 
 // Hook for cloud-synced creators
 export function useCloudCreators() {
   const [creators, setCreators] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [isOnline, setIsOnline] = useState(true)
+  const [isOnline, setIsOnline] = useState(false)
   const { success, error } = useToast()
 
   // Load creators from cloud on mount
@@ -25,8 +127,18 @@ export function useCloudCreators() {
   const initializeAndLoadCreators = async () => {
     try {
       setIsLoading(true)
+      console.log('🚀 Initializing creators cloud storage...')
       
-      // Initialize database first
+      // Test connection first
+      const connectionTest = await testSupabaseConnection()
+      if (!connectionTest.success) {
+        console.log('⚠️ Supabase connection failed, using local storage fallback')
+        loadFromLocalStorage()
+        setIsOnline(false)
+        return
+      }
+
+      // Initialize database
       const dbReady = await initializeDatabase()
       if (!dbReady) {
         console.log('⚠️ Database not ready, using local storage fallback')
@@ -66,60 +178,45 @@ export function useCloudCreators() {
         console.log('📱 Loaded creators from localStorage:', parsedData.length)
       } else {
         // Use default demo data if no local data
-        const defaultCreators = [
-          {
-            id: 1,
-            name: "Kurama",
-            email: "kurama@example.com",
-            phone: "+1 (555) 123-4567",
-            category: "Gaming",
-            region: "US",
-            phase: "Phase 2: Launch Week",
-            phaseNumber: 2,
-            cardsSold: 67,
-            totalCards: 100,
-            cardPrice: 100,
-            daysInPhase: 2,
-            nextTask: "Post group chat screenshot",
-            salesVelocity: "High",
-            avatar: "🎮",
-            bio: "Top Smash Bros player with 500K+ following",
-            socialMedia: {
-              instagram: "@kurama_smash",
-              twitter: "@KuramaPlays",
-              youtube: "@KuramaGaming",
-              tiktok: "@kurama.gaming"
-            },
-            assets: { profileImages: [], videos: [], pressKit: [] },
-            strategy: {
-              launchDate: "2025-06-20",
-              targetAudience: "Competitive gaming fans",
-              contentPlan: "Daily gameplay tips"
-            },
-            stackedProfileUrl: "https://stacked.com/kurama",
-            createdAt: "2025-06-10",
-            lastUpdated: "2025-06-16"
-          }
-        ]
         setCreators(defaultCreators)
         localStorage.setItem('stacked-creators', JSON.stringify(defaultCreators))
+        console.log('📱 Initialized with default creators')
       }
     } catch (err) {
       console.error('Failed to load from localStorage:', err)
-      setCreators([])
+      setCreators(defaultCreators)
     }
   }
 
   const loadCreators = async () => {
     try {
       const dbCreators = await CreatorService.getAllCreators()
-      const convertedCreators = dbCreators.map(convertDatabaseToCreator)
-      setCreators(convertedCreators)
+      
+      if (dbCreators.length === 0) {
+        // If no creators in database, populate with defaults
+        console.log('📊 No creators in database, populating with defaults...')
+        for (const creator of defaultCreators) {
+          try {
+            const dbCreator = convertCreatorToDatabase(creator)
+            await CreatorService.createCreator(dbCreator)
+          } catch (err) {
+            console.warn('Failed to create default creator:', creator.name, err)
+          }
+        }
+        // Reload after populating
+        const newDbCreators = await CreatorService.getAllCreators()
+        const convertedCreators = newDbCreators.map(convertDatabaseToCreator)
+        setCreators(convertedCreators)
+      } else {
+        const convertedCreators = dbCreators.map(convertDatabaseToCreator)
+        setCreators(convertedCreators)
+      }
+      
       setIsOnline(true)
-      console.log('✅ Loaded creators from cloud:', convertedCreators.length)
+      console.log('✅ Loaded creators from cloud:', creators.length)
       
       // Backup to localStorage
-      localStorage.setItem('stacked-creators', JSON.stringify(convertedCreators))
+      localStorage.setItem('stacked-creators', JSON.stringify(creators))
     } catch (err) {
       console.error('❌ Failed to load creators from cloud:', err)
       setIsOnline(false)
@@ -260,7 +357,7 @@ export function useCloudCreators() {
 export function useCloudContent() {
   const [content, setContent] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [isOnline, setIsOnline] = useState(true)
+  const [isOnline, setIsOnline] = useState(false)
   const { success, error } = useToast()
 
   // Load content from cloud on mount
@@ -271,8 +368,18 @@ export function useCloudContent() {
   const initializeAndLoadContent = async () => {
     try {
       setIsLoading(true)
+      console.log('🚀 Initializing content cloud storage...')
       
-      // Initialize database first
+      // Test connection first
+      const connectionTest = await testSupabaseConnection()
+      if (!connectionTest.success) {
+        console.log('⚠️ Supabase connection failed, using local storage fallback')
+        loadFromLocalStorage()
+        setIsOnline(false)
+        return
+      }
+
+      // Initialize database
       const dbReady = await initializeDatabase()
       if (!dbReady) {
         console.log('⚠️ Database not ready, using local storage fallback')

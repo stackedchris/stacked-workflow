@@ -12,6 +12,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    console.log('Fetching Airtable workspaces...')
+
     const response = await fetch('https://api.airtable.com/v0/meta/workspaces', {
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -20,13 +22,17 @@ export async function GET(request: NextRequest) {
     })
 
     if (!response.ok) {
+      const errorText = await response.text()
+      console.error('Failed to fetch workspaces:', errorText)
+      
       return NextResponse.json(
-        { success: false, error: 'Failed to fetch workspaces' },
+        { success: false, error: `Failed to fetch workspaces: ${response.statusText}` },
         { status: response.status }
       )
     }
 
     const data = await response.json()
+    console.log(`Found ${data.workspaces?.length || 0} workspaces`)
     
     return NextResponse.json({
       success: true,
@@ -36,7 +42,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Failed to get workspaces:', error)
     return NextResponse.json(
-      { success: false, error: 'Internal server error' },
+      { success: false, error: `Internal server error: ${(error as Error).message}` },
       { status: 500 }
     )
   }

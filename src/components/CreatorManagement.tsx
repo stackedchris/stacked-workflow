@@ -35,6 +35,7 @@ import PhaseManager from './PhaseManager'
 import CategoryManager from './CategoryManager'
 import { useCategories } from '@/hooks/useCategories'
 import { useToast } from '@/components/ui/toast'
+import { useCloudCreators } from '@/hooks/useCloudStorage'
 
 export interface Creator {
   id: number
@@ -111,13 +112,21 @@ export default function CreatorManagement({
   const [showCategoryManager, setShowCategoryManager] = useState(false)
   const [editForm, setEditForm] = useState<Partial<Creator>>({})
   const fileInputRef = useRef<HTMLInputElement>(null)
+  
+  // Use cloud storage hooks
+  const { 
+    addCreator: addCreatorToCloud, 
+    updateCreator: updateCreatorInCloud,
+    deleteCreator: deleteCreatorFromCloud,
+    isOnline: isCloudConnected
+  } = useCloudCreators()
 
   // Handle showAddCreator prop changes
-  useState(() => {
+  useEffect(() => {
     setIsCreating(showAddCreator)
-  })
+  }, [showAddCreator])
 
-  const handleCreateCreator = () => {
+  const handleCreateCreator = async () => {
     if (!editForm.name || !editForm.category) {
       error('Name and category are required')
       return
@@ -161,65 +170,127 @@ export default function CreatorManagement({
       lastUpdated: new Date().toISOString().split('T')[0]
     }
 
-    onCreatorsUpdate([...creators, newCreator])
-    setIsCreating(false)
-    setEditForm({})
-    onAddCreatorClose?.()
-    success('Creator added successfully')
+    try {
+      // Add to cloud storage
+      if (isCloudConnected) {
+        const cloudCreator = await addCreatorToCloud(newCreator)
+        if (cloudCreator) {
+          // Cloud storage handles the state update
+          success(`Creator ${newCreator.name} added and synced to cloud`)
+        } else {
+          // Fallback to local update if cloud fails
+          onCreatorsUpdate([...creators, newCreator])
+          success(`Creator ${newCreator.name} added locally`)
+        }
+      } else {
+        // Local update only
+        onCreatorsUpdate([...creators, newCreator])
+        success(`Creator ${newCreator.name} added locally`)
+      }
+      
+      setIsCreating(false)
+      setEditForm({})
+      onAddCreatorClose?.()
+    } catch (err) {
+      console.error('Failed to create creator:', err)
+      error('Failed to create creator. Please try again.')
+    }
   }
 
-  const handleUpdateCreator = () => {
+  const handleUpdateCreator = async () => {
     if (!selectedCreator || !editForm.name || !editForm.category) {
       error('Name and category are required')
       return
     }
 
-    const updatedCreators = creators.map(creator =>
-      creator.id === selectedCreator.id
-        ? {
-            ...creator,
-            ...editForm,
-            lastUpdated: new Date().toISOString().split('T')[0]
-          }
-        : creator
-    )
-
-    onCreatorsUpdate(updatedCreators)
-    setSelectedCreator(updatedCreators.find(c => c.id === selectedCreator.id) || null)
-    setIsEditing(false)
-    success('Creator updated successfully')
+    try {
+      const updatedCreator = {
+        ...selectedCreator,
+        ...editForm,
+        lastUpdated: new Date().toISOString().split('T')[0]
+      }
+      
+      // Update in cloud storage
+      if (isCloudConnected) {
+        await updateCreatorInCloud(selectedCreator.id, editForm)
+        // Cloud storage handles the state update
+        success(`Creator ${updatedCreator.name} updated and synced to cloud`)
+      } else {
+        // Local update only
+        const updatedCreators = creators.map(creator =>
+          creator.id === selectedCreator.id ? updatedCreator : creator
+        )
+        onCreatorsUpdate(updatedCreators)
+        setSelectedCreator(updatedCreator)
+        success(`Creator ${updatedCreator.name} updated locally`)
+      }
+      
+      setIsEditing(false)
+    } catch (err) {
+      console.error('Failed to update creator:', err)
+      error('Failed to update creator. Please try again.')
+    }
   }
 
-  const handleDeleteCreator = (creatorId: number) => {
-    const updatedCreators = creators.filter(creator => creator.id !== creatorId)
-    onCreatorsUpdate(updatedCreators)
-    if (selectedCreator?.id === creatorId) {
-      setSelectedCreator(null)
+  const handleDeleteCreator = async (creatorId: number) => {
+    if (!confirm('Are you sure you want to delete this creator?')) {
+      return
     }
-    success('Creator deleted successfully')
+    
+    try {
+      // Delete from cloud storage
+      if (isCloudConnected) {
+        await deleteCreatorFromCloud(creatorId)
+        // Cloud storage handles the state update
+        success('Creator deleted and synced to cloud')
+      } else {
+        // Local deletion only
+        const updatedCreators = creators.filter(creator => creator.id !== creatorId)
+        onCreatorsUpdate(updatedCreators)
+        success('Creator deleted locally')
+      }
+      
+      if (selectedCreator?.id === creatorId) {
+        setSelectedCreator(null)
+      }
+    } catch (err) {
+      console.error('Failed to delete creator:', err)
+      error('Failed to delete creator. Please try again.')
+    }
   }
 
   const handlePhaseChange = (creatorId: number, newPhaseNumber: number) => {
     const phase = phases.find(p => p.number === newPhaseNumber)
     if (!phase) return
 
-    const updatedCreators = creators.map(creator =>
-      creator.id === creatorId
-        ? {
-            ...creator,
-            phaseNumber: newPhaseNumber,
-            phase: phase.name,
-            daysInPhase: 0, // Reset days when manually changing phase
-            lastUpdated: new Date().toISOString().split('T')[0]
-          }
-        : creator
-    )
-
-    onCreatorsUpdate(updatedCreators)
-    if (selectedCreator?.id === creatorId) {
-      setSelectedCreator(updatedCreators.find(c => c.id === creatorId) || null)
+    try {
+      const updates = {
+        phaseNumber: newPhaseNumber,
+        phase: phase.name,
+        daysInPhase: 0, // Reset days when manually changing phase
+        lastUpdated: new Date().toISOString().split('T')[0]
+      }
+      
+      // Update in cloud storage
+      if (isCloudConnected) {
+        updateCreatorInCloud(creatorId, updates)
+        // Cloud storage handles the state update
+        success(`Creator moved to ${phase.name}`)
+      } else {
+        // Local update only
+        const updatedCreators = creators.map(creator =>
+          creator.id === creatorId ? { ...creator, ...updates } : creator
+        )
+        onCreatorsUpdate(updatedCreators)
+        if (selectedCreator?.id === creatorId) {
+          setSelectedCreator({ ...selectedCreator, ...updates })
+        }
+        success(`Creator moved to ${phase.name}`)
+      }
+    } catch (err) {
+      console.error('Failed to change phase:', err)
+      error('Failed to change phase. Please try again.')
     }
-    success(`Creator moved to ${phase.name}`)
   }
 
   const startEditing = (creator: Creator) => {
@@ -242,22 +313,34 @@ export default function CreatorManagement({
   const handleAssetsUpdate = (assetType: keyof Creator['assets'], assets: string[]) => {
     if (!selectedCreator) return
 
-    const updatedCreator = {
-      ...selectedCreator,
-      assets: {
-        ...selectedCreator.assets,
-        [assetType]: assets
-      },
-      lastUpdated: new Date().toISOString().split('T')[0]
+    try {
+      const updates = {
+        assets: {
+          ...selectedCreator.assets,
+          [assetType]: assets
+        },
+        lastUpdated: new Date().toISOString().split('T')[0]
+      }
+      
+      // Update in cloud storage
+      if (isCloudConnected) {
+        updateCreatorInCloud(selectedCreator.id, updates)
+        // Cloud storage handles the state update
+        success('Assets updated and synced to cloud')
+      } else {
+        // Local update only
+        const updatedCreator = { ...selectedCreator, ...updates }
+        const updatedCreators = creators.map(creator =>
+          creator.id === selectedCreator.id ? updatedCreator : creator
+        )
+        onCreatorsUpdate(updatedCreators)
+        setSelectedCreator(updatedCreator)
+        success('Assets updated locally')
+      }
+    } catch (err) {
+      console.error('Failed to update assets:', err)
+      error('Failed to update assets. Please try again.')
     }
-
-    const updatedCreators = creators.map(creator =>
-      creator.id === selectedCreator.id ? updatedCreator : creator
-    )
-
-    onCreatorsUpdate(updatedCreators)
-    setSelectedCreator(updatedCreator)
-    success('Assets updated successfully')
   }
 
   const getRegionDisplay = (region: string) => {
@@ -1030,9 +1113,18 @@ export default function CreatorManagement({
                             ...selectedCreator,
                             strategy: { ...selectedCreator.strategy, launchDate: e.target.value }
                           }
-                          const updatedCreators = creators.map(c => c.id === selectedCreator.id ? updatedCreator : c)
-                          onCreatorsUpdate(updatedCreators)
-                          setSelectedCreator(updatedCreator)
+                          
+                          // Update in cloud storage
+                          if (isCloudConnected) {
+                            updateCreatorInCloud(selectedCreator.id, {
+                              strategy: { ...selectedCreator.strategy, launchDate: e.target.value }
+                            })
+                          } else {
+                            // Local update only
+                            const updatedCreators = creators.map(c => c.id === selectedCreator.id ? updatedCreator : c)
+                            onCreatorsUpdate(updatedCreators)
+                            setSelectedCreator(updatedCreator)
+                          }
                         }}
                       />
                     </div>
@@ -1045,9 +1137,18 @@ export default function CreatorManagement({
                             ...selectedCreator,
                             strategy: { ...selectedCreator.strategy, targetAudience: e.target.value }
                           }
-                          const updatedCreators = creators.map(c => c.id === selectedCreator.id ? updatedCreator : c)
-                          onCreatorsUpdate(updatedCreators)
-                          setSelectedCreator(updatedCreator)
+                          
+                          // Update in cloud storage
+                          if (isCloudConnected) {
+                            updateCreatorInCloud(selectedCreator.id, {
+                              strategy: { ...selectedCreator.strategy, targetAudience: e.target.value }
+                            })
+                          } else {
+                            // Local update only
+                            const updatedCreators = creators.map(c => c.id === selectedCreator.id ? updatedCreator : c)
+                            onCreatorsUpdate(updatedCreators)
+                            setSelectedCreator(updatedCreator)
+                          }
                         }}
                         placeholder="Describe the target audience for this creator"
                         rows={3}
@@ -1062,9 +1163,18 @@ export default function CreatorManagement({
                             ...selectedCreator,
                             strategy: { ...selectedCreator.strategy, contentPlan: e.target.value }
                           }
-                          const updatedCreators = creators.map(c => c.id === selectedCreator.id ? updatedCreator : c)
-                          onCreatorsUpdate(updatedCreators)
-                          setSelectedCreator(updatedCreator)
+                          
+                          // Update in cloud storage
+                          if (isCloudConnected) {
+                            updateCreatorInCloud(selectedCreator.id, {
+                              strategy: { ...selectedCreator.strategy, contentPlan: e.target.value }
+                            })
+                          } else {
+                            // Local update only
+                            const updatedCreators = creators.map(c => c.id === selectedCreator.id ? updatedCreator : c)
+                            onCreatorsUpdate(updatedCreators)
+                            setSelectedCreator(updatedCreator)
+                          }
                         }}
                         placeholder="Outline the content strategy and plan"
                         rows={4}

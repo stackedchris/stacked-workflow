@@ -12,6 +12,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    console.log('Creating Airtable base:', { workspaceId, baseName })
+
     // Create new base
     const createBaseResponse = await fetch('https://api.airtable.com/v0/meta/bases', {
       method: 'POST',
@@ -123,7 +125,8 @@ export async function POST(request: NextRequest) {
                     { name: 'High', color: 'greenLight2' },
                     { name: 'Medium', color: 'yellowLight2' },
                     { name: 'Low', color: 'redLight2' },
-                    { name: 'Pending', color: 'grayLight2' }
+                    { name: 'Pending', color: 'grayLight2' },
+                    { name: 'Very High', color: 'greenDark2' }
                   ]
                 }
               },
@@ -241,6 +244,7 @@ export async function POST(request: NextRequest) {
 
     if (!createBaseResponse.ok) {
       const errorData = await createBaseResponse.json().catch(() => ({}))
+      console.error('Failed to create base:', errorData)
       return NextResponse.json(
         { success: false, error: `Failed to create base: ${errorData.error?.message || createBaseResponse.statusText}` },
         { status: createBaseResponse.status }
@@ -250,6 +254,8 @@ export async function POST(request: NextRequest) {
     const baseData = await createBaseResponse.json()
     const baseId = baseData.id
     const tableId = baseData.tables[0].id
+
+    console.log('Base created successfully:', { baseId, tableId })
 
     // Create views
     const viewsToCreate = [
@@ -325,6 +331,7 @@ export async function POST(request: NextRequest) {
     // Create each view
     for (const viewConfig of viewsToCreate) {
       try {
+        console.log(`Creating view: ${viewConfig.name}`)
         await fetch(`https://api.airtable.com/v0/meta/bases/${baseId}/tables/${tableId}/views`, {
           method: 'POST',
           headers: {
@@ -339,7 +346,10 @@ export async function POST(request: NextRequest) {
     }
 
     // If creators data is provided, populate the base
+    let recordsCreated = 0
     if (creators && creators.length > 0) {
+      console.log(`Populating base with ${creators.length} creators`)
+      
       const records = creators.map((creator: any) => ({
         fields: {
           'Name': creator.name,
@@ -373,17 +383,29 @@ export async function POST(request: NextRequest) {
       for (let i = 0; i < records.length; i += batchSize) {
         const batch = records.slice(i, i + batchSize)
         
-        await fetch(`https://api.airtable.com/v0/${baseId}/Creators`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            records: batch,
-            typecast: true
+        try {
+          const response = await fetch(`https://api.airtable.com/v0/${baseId}/Creators`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              records: batch,
+              typecast: true
+            })
           })
-        })
+          
+          if (response.ok) {
+            const result = await response.json()
+            recordsCreated += result.records.length
+            console.log(`Added batch of ${result.records.length} creators`)
+          } else {
+            console.error('Failed to add batch:', await response.text())
+          }
+        } catch (error) {
+          console.error('Error adding batch:', error)
+        }
       }
     }
 
@@ -393,7 +415,7 @@ export async function POST(request: NextRequest) {
       baseId,
       baseUrl: `https://airtable.com/${baseId}`,
       creatorsTableId: tableId,
-      recordsCreated: creators?.length || 0
+      recordsCreated
     })
 
   } catch (error) {

@@ -40,6 +40,16 @@ export const testSupabaseConnection = async () => {
   }
 }
 
+// Quick connection check
+export const quickConnectionCheck = async () => {
+  try {
+    const { data, error } = await supabase.auth.getSession()
+    return { success: !error, error: error?.message }
+  } catch (err) {
+    return { success: false, error: 'Connection failed' }
+  }
+}
+
 // Database types
 export interface DatabaseCreator {
   id: number

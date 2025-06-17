@@ -23,7 +23,8 @@ import {
   Wifi,
   WifiOff,
   Database,
-  ExternalLink
+  ExternalLink,
+  Cloud
 } from 'lucide-react'
 import Analytics from '@/components/Analytics'
 import CreatorManagement from '@/components/CreatorManagement'
@@ -35,6 +36,7 @@ import EmployeeManagement from '@/components/EmployeeManagement'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { useToast } from '@/components/ui/toast'
 import { testSupabaseConnection } from '@/lib/supabase'
+import { FirebaseStatus } from '@/components/FirebaseStatus'
 
 // Mock data for creators - Updated with full creator objects for testing
 const creators = [
@@ -484,6 +486,9 @@ export default function Dashboard() {
                 </span>
               </div>
               
+              {/* Firebase Status */}
+              <FirebaseStatus />
+              
               {/* Supabase Status */}
               <div className="flex items-center space-x-2">
                 {supabaseStatus === 'connected' ? (
@@ -505,10 +510,10 @@ export default function Dashboard() {
                     variant="outline" 
                     size="sm" 
                     className="h-6 px-2 text-xs"
-                    onClick={() => window.location.href = '/test-supabase'}
+                    onClick={() => window.location.href = '/firebase-setup'}
                   >
-                    <ExternalLink className="w-3 h-3 mr-1" />
-                    Test Connection
+                    <Cloud className="w-3 h-3 mr-1" />
+                    Use Firebase
                   </Button>
                 )}
               </div>

@@ -26,10 +26,12 @@ export const initializeSocket = (): Socket => {
   if (socket) return socket;
 
   // In production, connect to the deployed server
-  // In development, connect to the current host with the correct API path
+  // In development, connect to the current host
   const socketUrl = process.env.NODE_ENV === 'production'
-    ? 'https://stacked-sync-server.netlify.app'
-    : undefined;
+    ? window.location.origin
+    : window.location.origin;
+
+  console.log('🔌 Connecting to socket server at:', socketUrl);
 
   socket = io(socketUrl, {
     path: '/api/socket',

@@ -11,3 +11,16 @@
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
+
+# Support for Socket.io WebSockets
+[[redirects]]
+  from = "/api/socket/*"
+  to = "/.netlify/functions/next_api_socket_:splat"
+  status = 200
+  force = true
+
+# Fallback for all other routes
+[[redirects]]
+  from = "/*"
+  to = "/.netlify/functions/next"
+  status = 200

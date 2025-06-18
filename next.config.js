@@ -47,6 +47,8 @@ const nextConfig = {
       },
     ],
   },
+  // Add Socket.io support for API routes
+  serverComponentsExternalPackages: ['socket.io', 'socket.io-client'],
 };
 
 module.exports = nextConfig;

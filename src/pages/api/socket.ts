@@ -25,6 +25,7 @@ const initSocketServer = (res: NextApiResponseWithSocket) => {
         origin: '*',
         methods: ['GET', 'POST'],
       },
+      addTrailingSlash: false,
     });
 
     // Set up connection handler

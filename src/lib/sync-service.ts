@@ -24,9 +24,11 @@ class SyncService {
   private isInitialized = false;
   private lastSyncTime = 0;
   private syncKey = 'stacked-sync-data';
+  private heartbeatInterval: NodeJS.Timeout | null = null;
+  private pollInterval: NodeJS.Timeout | null = null;
 
   constructor() {
-    this.initialize();
+    // Don't auto-initialize to avoid SSR issues
   }
 
   initialize() {
@@ -77,13 +79,109 @@ class SyncService {
         window.addEventListener('storage', this.handleStorageEvent);
       }
       
+      // Set up polling for cross-browser sync
+      this.setupPolling();
+      
     } catch (error) {
       console.error('Failed to initialize sync service:', error);
     }
   }
 
+  private setupPolling() {
+    // Poll for changes every 2 seconds
+    this.pollInterval = setInterval(() => {
+      this.pollForChanges();
+    }, 2000);
+    
+    // Send heartbeat every 30 seconds
+    this.heartbeatInterval = setInterval(() => {
+      this.sendHeartbeat();
+    }, 30000);
+  }
+
+  private async pollForChanges() {
+    try {
+      // Check for changes in localStorage
+      const syncData = localStorage.getItem(this.syncKey);
+      if (syncData) {
+        const parsedData = JSON.parse(syncData);
+        
+        // Only process if it's newer than our last sync and from a different user
+        if (parsedData.timestamp > this.lastSyncTime && parsedData.userId !== userId) {
+          this.triggerEvent('sync', parsedData);
+          this.lastSyncTime = parsedData.timestamp;
+        }
+      }
+      
+      // Also check for creators and content directly
+      const creatorsData = localStorage.getItem('stacked-creators');
+      const contentData = localStorage.getItem('stacked-content');
+      
+      // Store the current data in memory for comparison in future polls
+      if (creatorsData) {
+        this.storeDataForComparison('creators', creatorsData);
+      }
+      
+      if (contentData) {
+        this.storeDataForComparison('content', contentData);
+      }
+    } catch (error) {
+      console.error('Error polling for changes:', error);
+    }
+  }
+  
+  // Store data in memory for comparison
+  private dataCache: Record<string, string> = {};
+  
+  private storeDataForComparison(key: string, data: string) {
+    // If we have previous data and it's different, trigger a sync event
+    if (this.dataCache[key] && this.dataCache[key] !== data) {
+      try {
+        const parsedData = JSON.parse(data);
+        this.triggerEvent('sync', {
+          type: key as SyncEvent['type'],
+          action: 'update',
+          data: parsedData,
+          userId: 'system',
+          timestamp: Date.now()
+        });
+      } catch (error) {
+        console.error(`Error parsing ${key} data:`, error);
+      }
+    }
+    
+    // Update cache
+    this.dataCache[key] = data;
+  }
+
+  private async sendHeartbeat() {
+    try {
+      // Send heartbeat to server to track active users
+      const response = await fetch('/api/sync/status', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          clientId: userId,
+          action: 'heartbeat'
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        // Update connected clients count
+        if (data.connectedClients > 1) {
+          this.triggerEvent('users', data.connectedClients);
+        }
+      }
+    } catch (error) {
+      console.error('Error sending heartbeat:', error);
+    }
+  }
+
   private handleStorageEvent = (event: StorageEvent) => {
-    // Only process events for our sync key
+    // Process events for our sync key
     if (event.key === this.syncKey && event.newValue) {
       try {
         const syncData = JSON.parse(event.newValue);
@@ -98,6 +196,37 @@ class SyncService {
         this.lastSyncTime = Date.now();
       } catch (error) {
         console.error('Error processing storage event:', error);
+      }
+    }
+    
+    // Also process direct changes to creators and content
+    if (event.key === 'stacked-creators' && event.newValue) {
+      try {
+        const creators = JSON.parse(event.newValue);
+        this.triggerEvent('sync', {
+          type: 'creators',
+          action: 'update',
+          data: creators,
+          userId: 'storage-event',
+          timestamp: Date.now()
+        });
+      } catch (error) {
+        console.error('Error processing creators storage event:', error);
+      }
+    }
+    
+    if (event.key === 'stacked-content' && event.newValue) {
+      try {
+        const content = JSON.parse(event.newValue);
+        this.triggerEvent('sync', {
+          type: 'content',
+          action: 'update',
+          data: content,
+          userId: 'storage-event',
+          timestamp: Date.now()
+        });
+      } catch (error) {
+        console.error('Error processing content storage event:', error);
       }
     }
   };
@@ -184,6 +313,17 @@ class SyncService {
     if (this.channel) {
       this.channel.close();
       this.channel = null;
+    }
+    
+    // Clear intervals
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval);
+      this.pollInterval = null;
+    }
+    
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
     }
     
     // Only remove event listeners in browser environment

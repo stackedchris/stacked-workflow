@@ -13,24 +13,25 @@ export function SyncStatus() {
     // Set up connection status listener
     const handleConnected = () => {
       setIsConnected(true)
-      setUserCount(prev => prev + 1)
     }
 
     const handleDisconnected = () => {
-      setUserCount(prev => Math.max(1, prev - 1))
+      setIsConnected(false)
+    }
+    
+    const handleUsers = (count: number) => {
+      setUserCount(count)
     }
     
     syncService.on('connected', handleConnected)
     syncService.on('disconnected', handleDisconnected)
-    
-    // Simulate some other users for demo purposes
-    const simulatedUsers = Math.floor(Math.random() * 2) + 1 // 1-2 other users
-    setUserCount(simulatedUsers + 1) // +1 for current user
+    syncService.on('users', handleUsers)
     
     // Clean up listeners on unmount
     return () => {
       syncService.off('connected', handleConnected)
       syncService.off('disconnected', handleDisconnected)
+      syncService.off('users', handleUsers)
     }
   }, [])
 

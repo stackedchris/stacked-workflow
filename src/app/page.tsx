@@ -32,6 +32,8 @@ import StrategyGuide from '@/components/StrategyGuide'
 import EmployeeManagement from '@/components/EmployeeManagement'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { useToast } from '@/components/ui/toast'
+import { SyncStatus } from '@/components/SyncStatus'
+import { initializeSocket } from '@/lib/socket'
 
 // Mock data for creators - Updated with full creator objects for testing
 const creators = [
@@ -248,10 +250,14 @@ export default function Dashboard() {
   const [selectedCreator, setSelectedCreator] = useState(creators[0])
   const [showAddCreator, setShowAddCreator] = useState(false)
   const [activeTab, setActiveTab, isTabHydrated] = useLocalStorage('stacked-active-tab', "pipeline")
-  const [isAutoSyncing, setIsAutoSyncing] = useState(false)
   const [lastSyncTime, setLastSyncTime, isSyncTimeHydrated] = useLocalStorage('stacked-last-sync', '')
   const [connectionStatus, setConnectionStatus] = useState<'checking' | 'online' | 'offline'>('checking')
   const { success, error } = useToast()
+
+  // Initialize socket connection on mount
+  useEffect(() => {
+    initializeSocket();
+  }, []);
 
   // Check connection status on mount
   useEffect(() => {
@@ -316,26 +322,12 @@ export default function Dashboard() {
     }
   }, [allCreators, selectedCreator, isCreatorsHydrated])
 
-  // Auto-sync to cloud when online
+  // Record sync time when changes are made
   useEffect(() => {
-    const autoSync = setInterval(async () => {
-      if (connectionStatus === 'online' && allCreators.length > 0) {
-        setIsAutoSyncing(true)
-        try {
-          // Simulate cloud sync
-          await new Promise(resolve => setTimeout(resolve, 1000))
-          setLastSyncTime(new Date().toLocaleTimeString())
-          console.log('Auto-synced creators to cloud')
-        } catch (error) {
-          console.error('Auto-sync failed:', error)
-        } finally {
-          setIsAutoSyncing(false)
-        }
-      }
-    }, 30000) // Sync every 30 seconds when online
-
-    return () => clearInterval(autoSync)
-  }, [allCreators, connectionStatus, setLastSyncTime])
+    if (isCreatorsHydrated || allContent.length > 0) {
+      setLastSyncTime(new Date().toLocaleTimeString())
+    }
+  }, [allCreators, allContent, setLastSyncTime])
 
   // Handle marking task as complete with proper phase alignment and confirmation
   const handleMarkTaskComplete = (creatorId: number) => {
@@ -391,15 +383,6 @@ export default function Dashboard() {
       } else {
         success(`Task completed for ${creator.name}`, `Next: ${updatedCreator.nextTask}`)
       }
-    }
-
-    // Trigger sync if online
-    if (connectionStatus === 'online') {
-      setIsAutoSyncing(true)
-      setTimeout(() => {
-        setLastSyncTime(new Date().toLocaleTimeString())
-        setIsAutoSyncing(false)
-      }, 1000)
     }
   }
 
@@ -460,10 +443,12 @@ export default function Dashboard() {
               </div>
               
               {/* Sync Status */}
+              <SyncStatus />
+              
+              {/* Last Sync Time */}
               {lastSyncTime && (
                 <div className="flex items-center text-sm text-gray-500">
-                  <div className={`w-2 h-2 rounded-full mr-2 ${isAutoSyncing ? 'bg-yellow-400 animate-pulse' : 'bg-green-400'}`} />
-                  {isAutoSyncing ? 'Syncing...' : `Last synced: ${lastSyncTime}`}
+                  <span>Last change: {lastSyncTime}</span>
                 </div>
               )}
             </div>

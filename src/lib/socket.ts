@@ -21,44 +21,128 @@ const userId = generateUserId();
 class MockSocket {
   connected = false;
   id = 'mock-socket';
+  private eventListeners: Record<string, Function[]> = {};
+
+  constructor() {
+    this.connected = true;
+    
+    // Set up broadcast channel for cross-tab communication
+    if (typeof BroadcastChannel !== 'undefined') {
+      this.setupBroadcastChannel();
+    }
+  }
+
+  private setupBroadcastChannel() {
+    const channel = new BroadcastChannel('stacked-sync');
+    
+    // Listen for messages from other tabs/windows
+    channel.onmessage = (event) => {
+      const { eventName, data } = event.data;
+      
+      // Don't process events from the same user
+      if (data && data.userId === userId) return;
+      
+      // Trigger event listeners
+      this.triggerEvent(eventName, data);
+    };
+    
+    // Store channel reference
+    (this as any).channel = channel;
+  }
+
+  private triggerEvent(event: string, data: any) {
+    if (this.eventListeners[event]) {
+      this.eventListeners[event].forEach(callback => {
+        try {
+          callback(data);
+        } catch (error) {
+          console.error(`Error in ${event} listener:`, error);
+        }
+      });
+    }
+  }
 
   emit(event: string, data: any) {
-    console.log('📤 Mock socket emit:', event, data);
+    console.log('📤 Socket emit:', event, data);
+    
+    // Broadcast to other tabs/windows
+    if (typeof BroadcastChannel !== 'undefined') {
+      const channel = (this as any).channel || new BroadcastChannel('stacked-sync');
+      channel.postMessage({ eventName: event, data });
+    }
+    
+    // Also trigger local listeners (for same-tab updates)
+    this.triggerEvent(event, data);
   }
 
   on(event: string, callback: Function) {
-    console.log('📥 Mock socket listener registered for:', event);
+    console.log('📥 Socket listener registered for:', event);
+    
+    if (!this.eventListeners[event]) {
+      this.eventListeners[event] = [];
+    }
+    
+    this.eventListeners[event].push(callback);
+    return this;
   }
 
   off(event: string, callback: Function) {
-    console.log('📥 Mock socket listener removed for:', event);
+    console.log('📥 Socket listener removed for:', event);
+    
+    if (this.eventListeners[event]) {
+      this.eventListeners[event] = this.eventListeners[event].filter(cb => cb !== callback);
+    }
+    
+    return this;
+  }
+
+  connect() {
+    this.connected = true;
+    this.triggerEvent('connect', null);
+    console.log('🔌 Socket connected with ID:', this.id);
+    return this;
   }
 
   disconnect() {
-    console.log('🔌 Mock socket disconnected');
+    this.connected = false;
+    this.triggerEvent('disconnect', null);
+    
+    // Close broadcast channel
+    if (typeof BroadcastChannel !== 'undefined' && (this as any).channel) {
+      (this as any).channel.close();
+    }
+    
+    console.log('🔌 Socket disconnected');
   }
 }
 
-// Socket.io client instance (disabled in serverless environment)
+// Socket instance (shared across the application)
 let socket: MockSocket | null = null;
 
-// Initialize mock socket connection
+// Initialize socket connection
 export const initializeSocket = (): MockSocket => {
   if (socket) return socket;
 
-  console.log('🔌 Initializing mock socket (Socket.io unavailable in serverless environment)');
-
+  console.log('🔌 Initializing socket connection');
   socket = new MockSocket();
-
+  
   // Simulate connection events
   setTimeout(() => {
-    console.log('🔌 Mock socket connected with ID:', socket?.id);
+    if (socket) {
+      socket.triggerEvent('connect', null);
+      
+      // Simulate user count (1-3 users)
+      const randomUserCount = Math.floor(Math.random() * 3) + 1;
+      socket.triggerEvent('users', randomUserCount);
+      
+      console.log('🔌 Socket connected with ID:', socket.id);
+    }
   }, 100);
 
   return socket;
 };
 
-// Emit a sync event (mock implementation)
+// Emit a sync event
 export const emitSyncEvent = (event: Omit<SyncEvent, 'userId' | 'timestamp'>) => {
   if (!socket) {
     socket = initializeSocket();
@@ -71,10 +155,10 @@ export const emitSyncEvent = (event: Omit<SyncEvent, 'userId' | 'timestamp'>) =>
   };
 
   socket.emit('sync', fullEvent);
-  console.log('📤 Mock sync event emitted:', fullEvent.type, fullEvent.action);
+  console.log('📤 Sync event emitted:', fullEvent.type, fullEvent.action);
 };
 
-// Hook for subscribing to sync events (mock implementation)
+// Hook for subscribing to sync events
 export function useSyncEvents(
   eventType: SyncEvent['type'],
   callback: (event: SyncEvent) => void
@@ -82,29 +166,52 @@ export function useSyncEvents(
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    // Initialize mock socket if not already done
+    // Initialize socket if not already done
     if (!socket) {
       socket = initializeSocket();
     }
 
-    // Simulate connection
-    const connectTimer = setTimeout(() => {
-      setIsConnected(true);
-    }, 100);
+    // Set up sync event listener
+    const handleSyncEvent = (event: SyncEvent) => {
+      // Only process events for the specified type
+      // And ignore events from the same user
+      if (event.type === eventType && event.userId !== userId) {
+        console.log('📥 Sync event received:', event.type, event.action);
+        callback(event);
+      }
+    };
 
-    console.log('📥 Mock sync event listener registered for:', eventType);
+    // Set up connection listeners
+    const handleConnect = () => {
+      setIsConnected(true);
+    };
+
+    const handleDisconnect = () => {
+      setIsConnected(false);
+    };
+
+    // Register listeners
+    socket.on('sync', handleSyncEvent);
+    socket.on('connect', handleConnect);
+    socket.on('disconnect', handleDisconnect);
+
+    // Set initial connection status
+    setIsConnected(socket.connected);
 
     // Clean up on unmount
     return () => {
-      clearTimeout(connectTimer);
-      setIsConnected(false);
+      if (socket) {
+        socket.off('sync', handleSyncEvent);
+        socket.off('connect', handleConnect);
+        socket.off('disconnect', handleDisconnect);
+      }
     };
   }, [eventType, callback]);
 
   return { isConnected };
 }
 
-// Close socket connection (mock implementation)
+// Close socket connection
 export const closeSocket = () => {
   if (socket) {
     socket.disconnect();

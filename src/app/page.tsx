@@ -245,8 +245,12 @@ const getFirstTaskForPhase = (phaseNumber: number) => {
 
 export default function Dashboard() {
   // Use localStorage to persist data across page refreshes
-  const [allCreators, setAllCreators, isCreatorsHydrated] = useLocalStorage('stacked-creators', creators)
+  const [rawCreators, setRawCreators, isCreatorsHydrated] = useLocalStorage('stacked-creators', creators)
   const [allContent, setAllContent] = useLocalStorage('stacked-content', [])
+  
+  // Ensure allCreators is always an array to prevent reduce/filter errors
+  const allCreators = Array.isArray(rawCreators) ? rawCreators : []
+  
   const [selectedCreator, setSelectedCreator] = useState(creators[0])
   const [showAddCreator, setShowAddCreator] = useState(false)
   const [activeTab, setActiveTab, isTabHydrated] = useLocalStorage('stacked-active-tab', "pipeline")
@@ -372,7 +376,7 @@ export default function Dashboard() {
       return c
     })
 
-    setAllCreators(updatedCreators)
+    setRawCreators(updatedCreators)
     
     // Show success message with context
     const updatedCreator = updatedCreators.find(c => c.id === creatorId)
@@ -699,7 +703,7 @@ export default function Dashboard() {
           <TabsContent value="creators">
             <CreatorManagement
               creators={allCreators}
-              onCreatorsUpdate={setAllCreators}
+              onCreatorsUpdate={setRawCreators}
               showAddCreator={showAddCreator}
               onAddCreatorClose={() => setShowAddCreator(false)}
             />
@@ -731,7 +735,7 @@ export default function Dashboard() {
           <TabsContent value="employees">
             <EmployeeManagement 
               creators={allCreators} 
-              onCreatorsUpdate={setAllCreators}
+              onCreatorsUpdate={setRawCreators}
             />
           </TabsContent>
 

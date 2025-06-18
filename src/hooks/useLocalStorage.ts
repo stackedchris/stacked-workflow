@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { isBrowser, safeLocalStorage } from '@/lib/utils'
-import { emitSyncEvent, onSyncEvent } from '@/lib/sync-service'
+import { syncService } from '@/lib/sync-service'
 
 export function useLocalStorage<T>(key: string, initialValue: T) {
   // State to store our value
@@ -27,8 +27,8 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
   useEffect(() => {
     if (!isHydrated) return;
     
-    const cleanup = onSyncEvent(getEventTypeFromKey(key), (event) => {
-      if (event.action === 'update') {
+    const cleanup = syncService.on('sync', (event: any) => {
+      if (event.type === getEventTypeFromKey(key) && event.action === 'update' && event.userId !== 'local') {
         // Update local state with the synced data
         setStoredValue(event.data)
         
@@ -38,7 +38,11 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
       }
     });
     
-    return cleanup;
+    return () => {
+      if (cleanup && typeof cleanup === 'function') {
+        cleanup();
+      }
+    };
   }, [key, isHydrated]);
 
   // Return a wrapped version of useState's setter function that persists the new value to localStorage
@@ -56,7 +60,7 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
         console.log(`Saved to localStorage [${key}]:`, valueToStore)
         
         // Emit sync event to other clients
-        emitSyncEvent({
+        syncService.emitSyncEvent({
           type: getEventTypeFromKey(key),
           action: 'update',
           data: valueToStore
@@ -72,11 +76,12 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
 }
 
 // Helper function to determine event type from localStorage key
-function getEventTypeFromKey(key: string): 'creators' | 'content' | 'employees' | 'strategies' {
+function getEventTypeFromKey(key: string): 'creators' | 'content' | 'employees' | 'strategies' | 'categories' {
   if (key.includes('creator')) return 'creators'
   if (key.includes('content')) return 'content'
   if (key.includes('employee')) return 'employees'
   if (key.includes('strateg')) return 'strategies'
+  if (key.includes('categor')) return 'categories'
   
   // Default fallback
   return 'creators'

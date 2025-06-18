@@ -446,7 +446,6 @@ export default function Dashboard() {
                 </span>
               </div>
               
-              {/* Sync Status */}
               <SyncStatus />
               
               {/* Last Sync Time */}

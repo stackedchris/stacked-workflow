@@ -116,6 +116,7 @@ class SyncService {
       // Also check for creators and content directly
       const creatorsData = localStorage.getItem('stacked-creators');
       const contentData = localStorage.getItem('stacked-content');
+      const categoriesData = localStorage.getItem('stacked-categories');
       
       // Store the current data in memory for comparison in future polls
       if (creatorsData) {
@@ -124,6 +125,10 @@ class SyncService {
       
       if (contentData) {
         this.storeDataForComparison('content', contentData);
+      }
+      
+      if (categoriesData) {
+        this.storeDataForComparison('categories', categoriesData);
       }
     } catch (error) {
       console.error('Error polling for changes:', error);
@@ -229,6 +234,21 @@ class SyncService {
         console.error('Error processing content storage event:', error);
       }
     }
+    
+    if (event.key === 'stacked-categories' && event.newValue) {
+      try {
+        const categories = JSON.parse(event.newValue);
+        this.triggerEvent('sync', {
+          type: 'categories',
+          action: 'update',
+          data: categories,
+          userId: 'storage-event',
+          timestamp: Date.now()
+        });
+      } catch (error) {
+        console.error('Error processing categories storage event:', error);
+      }
+    }
   };
 
   private triggerEvent(event: string, data: any) {
@@ -278,7 +298,7 @@ class SyncService {
     }
     
     this.eventListeners[event].push(callback);
-    return this;
+    return () => this.off(event, callback);
   }
 
   off(event: string, callback: Function) {
@@ -287,8 +307,6 @@ class SyncService {
     if (this.eventListeners[event]) {
       this.eventListeners[event] = this.eventListeners[event].filter(cb => cb !== callback);
     }
-    
-    return this;
   }
 
   // Emit a sync event
@@ -357,10 +375,8 @@ export const onSyncEvent = (
     }
   };
 
-  syncService.on('sync', handleSyncEvent);
+  const cleanup = syncService.on('sync', handleSyncEvent);
   
   // Return cleanup function
-  return () => {
-    syncService.off('sync', handleSyncEvent);
-  };
+  return cleanup;
 };

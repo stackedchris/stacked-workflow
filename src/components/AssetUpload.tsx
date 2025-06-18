@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -48,6 +48,17 @@ export default function AssetUpload({
   const [assets, setAssets] = useState<AssetFile[]>([])
   const [isDragOver, setIsDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const uploadIntervalsRef = useRef<Map<string, NodeJS.Timeout>>(new Map())
+
+  // Cleanup intervals on unmount
+  useEffect(() => {
+    return () => {
+      uploadIntervalsRef.current.forEach((interval) => {
+        clearInterval(interval)
+      })
+      uploadIntervalsRef.current.clear()
+    }
+  }, [])
 
   const getAssetTypeConfig = () => {
     switch (assetType) {
@@ -119,6 +130,8 @@ export default function AssetUpload({
       if (progress >= 100) {
         progress = 100
         clearInterval(interval)
+        uploadIntervalsRef.current.delete(assetId)
+        
         setAssets(prev => prev.map(asset =>
           asset.id === assetId
             ? {
@@ -141,6 +154,9 @@ export default function AssetUpload({
         ))
       }
     }, 200)
+
+    // Store interval reference for cleanup
+    uploadIntervalsRef.current.set(assetId, interval)
   }
 
   const handleFileSelect = (files: FileList | null) => {
@@ -202,6 +218,13 @@ export default function AssetUpload({
   }
 
   const removeAsset = (assetId: string) => {
+    // Clear any running interval for this asset
+    const interval = uploadIntervalsRef.current.get(assetId)
+    if (interval) {
+      clearInterval(interval)
+      uploadIntervalsRef.current.delete(assetId)
+    }
+
     const asset = assets.find(a => a.id === assetId)
     if (asset && asset.url) {
       URL.revokeObjectURL(asset.url) // Clean up memory

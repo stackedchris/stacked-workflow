@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { isBrowser, safeLocalStorage } from '@/lib/utils'
-import { emitSyncEvent, useSyncEvents } from '@/lib/socket'
+import { emitSyncEvent, onSyncEvent } from '@/lib/sync-service'
 
 export function useLocalStorage<T>(key: string, initialValue: T) {
   // State to store our value
@@ -24,16 +24,22 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
   }, [key])
 
   // Subscribe to sync events for this key
-  useSyncEvents(getEventTypeFromKey(key), (event) => {
-    if (event.action === 'update') {
-      // Update local state with the synced data
-      setStoredValue(event.data)
-      
-      // Also update localStorage
-      safeLocalStorage.setItem(key, JSON.stringify(event.data))
-      console.log(`🔄 Synced ${key} from remote update`)
-    }
-  })
+  useEffect(() => {
+    if (!isHydrated) return;
+    
+    const cleanup = onSyncEvent(getEventTypeFromKey(key), (event) => {
+      if (event.action === 'update') {
+        // Update local state with the synced data
+        setStoredValue(event.data)
+        
+        // Also update localStorage
+        safeLocalStorage.setItem(key, JSON.stringify(event.data))
+        console.log(`🔄 Synced ${key} from remote update`)
+      }
+    });
+    
+    return cleanup;
+  }, [key, isHydrated]);
 
   // Return a wrapped version of useState's setter function that persists the new value to localStorage
   const setValue = (value: T | ((val: T) => T)) => {

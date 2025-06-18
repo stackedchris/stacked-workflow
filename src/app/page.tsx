@@ -33,7 +33,7 @@ import EmployeeManagement from '@/components/EmployeeManagement'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { useToast } from '@/components/ui/toast'
 import { SyncStatus } from '@/components/SyncStatus'
-import { initializeSocket } from '@/lib/socket'
+import { syncService } from '@/lib/sync-service'
 
 // Mock data for creators - Updated with full creator objects for testing
 const creators = [
@@ -254,9 +254,9 @@ export default function Dashboard() {
   const [connectionStatus, setConnectionStatus] = useState<'checking' | 'online' | 'offline'>('checking')
   const { success, error } = useToast()
 
-  // Initialize socket connection on mount
+  // Initialize sync service
   useEffect(() => {
-    initializeSocket();
+    syncService.initialize();
   }, []);
 
   // Check connection status on mount

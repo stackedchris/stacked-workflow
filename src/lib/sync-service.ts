@@ -32,6 +32,12 @@ class SyncService {
   initialize() {
     if (this.isInitialized) return;
     
+    // Only initialize in browser environment
+    if (typeof window === 'undefined') {
+      console.log('SyncService: Skipping initialization in SSR environment');
+      return;
+    }
+    
     try {
       // Set up broadcast channel for cross-tab communication
       if (typeof BroadcastChannel !== 'undefined') {
@@ -61,13 +67,15 @@ class SyncService {
       // Trigger connected event
       this.triggerEvent('connected', { userId });
       
-      // Set up window unload handler
-      window.addEventListener('beforeunload', () => {
-        this.triggerEvent('disconnected', { userId });
-      });
-      
-      // Set up storage event listener for cross-browser sync
-      window.addEventListener('storage', this.handleStorageEvent);
+      // Set up window unload handler - only in browser
+      if (typeof window !== 'undefined') {
+        window.addEventListener('beforeunload', () => {
+          this.triggerEvent('disconnected', { userId });
+        });
+        
+        // Set up storage event listener for cross-browser sync
+        window.addEventListener('storage', this.handleStorageEvent);
+      }
       
     } catch (error) {
       console.error('Failed to initialize sync service:', error);
@@ -127,8 +135,8 @@ class SyncService {
     // Update last sync time
     this.lastSyncTime = Date.now();
     
-    // Store in localStorage for cross-browser sync
-    if (event === 'sync') {
+    // Store in localStorage for cross-browser sync - only in browser
+    if (event === 'sync' && typeof localStorage !== 'undefined') {
       localStorage.setItem(this.syncKey, JSON.stringify(enhancedData));
     }
   }
@@ -178,7 +186,11 @@ class SyncService {
       this.channel = null;
     }
     
-    window.removeEventListener('storage', this.handleStorageEvent);
+    // Only remove event listeners in browser environment
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('storage', this.handleStorageEvent);
+    }
+    
     this.eventListeners = {};
     this.isInitialized = false;
   }

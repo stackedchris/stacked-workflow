@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -18,31 +17,22 @@ import {
   User,
   Mail,
   Phone,
-  Settings,
-  Tag,
   Instagram,
   Twitter,
   Youtube,
-  CheckCircle2,
-  Clock,
-  Target,
+  MessageSquare,
   Calendar,
-  ChevronRight,
-  ChevronDown,
-  AlertCircle,
-  Zap,
-  Minus,
-  Copy,
-  ExternalLink
+  DollarSign,
+  Tag,
+  Settings
 } from 'lucide-react'
-import { InstagramIcon, TwitterIcon, YouTubeIcon, TikTokIcon } from '@/components/ui/icons'
-import { useLocalStorage } from '@/hooks/useLocalStorage'
-import { useToast } from '@/components/ui/toast'
+import { TikTokIcon, InstagramIcon, TwitterIcon, YouTubeIcon } from '@/components/ui/icons'
+import { useCategories } from '@/hooks/useCategories'
 import PhaseManager from '@/components/PhaseManager'
 import ProfilePictureUpload from '@/components/ProfilePictureUpload'
 import AssetUpload from '@/components/AssetUpload'
 import CategoryManager from '@/components/CategoryManager'
-import { useCategories } from '@/hooks/useCategories'
+import { useToast } from '@/components/ui/toast'
 import { syncService } from '@/lib/sync-service'
 
 export interface Creator {
@@ -83,13 +73,13 @@ export interface Creator {
 }
 
 interface CreatorManagementProps {
-  creators: Creator[]
-  onCreatorsUpdate: (creators: Creator[]) => void
+  creators?: Creator[]
+  onCreatorsUpdate?: (creators: Creator[]) => void
   showAddCreator?: boolean
   onAddCreatorClose?: () => void
 }
 
-const defaultCreator: Omit<Creator, 'id'> = {
+const defaultCreator: Omit<Creator, 'id' | 'createdAt' | 'lastUpdated'> = {
   name: '',
   email: '',
   phone: '',
@@ -120,43 +110,45 @@ const defaultCreator: Omit<Creator, 'id'> = {
     launchDate: '',
     targetAudience: '',
     contentPlan: ''
-  },
-  createdAt: new Date().toISOString().split('T')[0],
-  lastUpdated: new Date().toISOString().split('T')[0]
+  }
 }
 
 const regions = [
-  { value: 'US', label: 'North America' },
-  { value: 'Brazil', label: 'South America' },
-  { value: 'UK', label: 'Europe' },
-  { value: 'Japan', label: 'Asia' },
-  { value: 'Australia', label: 'Oceania' }
+  { value: 'US', label: 'United States' },
+  { value: 'Canada', label: 'Canada' },
+  { value: 'UK', label: 'United Kingdom' },
+  { value: 'Australia', label: 'Australia' },
+  { value: 'Brazil', label: 'Brazil' },
+  { value: 'Japan', label: 'Japan' },
+  { value: 'South Korea', label: 'South Korea' },
+  { value: 'Germany', label: 'Germany' },
+  { value: 'France', label: 'France' },
+  { value: 'Mexico', label: 'Mexico' }
 ]
 
 const velocities = [
-  { value: 'High', label: 'High', color: 'bg-green-100 text-green-800' },
-  { value: 'Medium', label: 'Medium', color: 'bg-yellow-100 text-yellow-800' },
-  { value: 'Low', label: 'Low', color: 'bg-red-100 text-red-800' },
-  { value: 'Pending', label: 'Pending', color: 'bg-gray-100 text-gray-800' },
-  { value: 'Very High', label: 'Very High', color: 'bg-green-100 text-green-800' }
+  { value: 'High', label: 'High' },
+  { value: 'Medium', label: 'Medium' },
+  { value: 'Low', label: 'Low' },
+  { value: 'Pending', label: 'Pending' }
 ]
 
-export default function CreatorManagement({
-  creators,
+export default function CreatorManagement({ 
+  creators = [], 
   onCreatorsUpdate,
   showAddCreator = false,
   onAddCreatorClose
 }: CreatorManagementProps) {
+  // Ensure creators is always an array
+  const safeCreators = Array.isArray(creators) ? creators : [];
+  
   const [selectedCreator, setSelectedCreator] = useState<Creator | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [isCreating, setIsCreating] = useState(showAddCreator)
   const [editForm, setEditForm] = useState<Partial<Creator>>({})
   const [activeTab, setActiveTab] = useState('profile')
-  const [searchTerm, setSearchTerm] = useState('')
-  const [filterCategory, setFilterCategory] = useState('all')
-  const [filterPhase, setFilterPhase] = useState('all')
   const [showCategoryManager, setShowCategoryManager] = useState(false)
-  const { categories } = useCategories()
+  const { categories, getCategoryNames } = useCategories()
   const { success, error } = useToast()
 
   // Update isCreating when showAddCreator changes
@@ -164,20 +156,19 @@ export default function CreatorManagement({
     setIsCreating(showAddCreator)
   }, [showAddCreator])
 
-  // Select first creator when list changes
+  // Select first creator by default if none selected
   useEffect(() => {
-    if (creators.length > 0 && !selectedCreator) {
-      setSelectedCreator(creators[0])
-    } else if (creators.length > 0 && selectedCreator) {
-      // Update selected creator if it's been updated in the list
-      const updatedCreator = creators.find(c => c.id === selectedCreator.id)
-      if (updatedCreator) {
-        setSelectedCreator(updatedCreator)
-      }
-    } else if (creators.length === 0) {
-      setSelectedCreator(null)
+    if (!selectedCreator && safeCreators.length > 0) {
+      setSelectedCreator(safeCreators[0])
     }
-  }, [creators, selectedCreator])
+  }, [safeCreators, selectedCreator])
+
+  // Reset selected creator if it's no longer in the list
+  useEffect(() => {
+    if (selectedCreator && !safeCreators.find(c => c.id === selectedCreator.id)) {
+      setSelectedCreator(safeCreators[0] || null)
+    }
+  }, [safeCreators, selectedCreator])
 
   const handleCreateCreator = () => {
     if (!editForm.name || !editForm.category) {
@@ -193,17 +184,13 @@ export default function CreatorManagement({
       lastUpdated: new Date().toISOString().split('T')[0]
     }
 
-    const updatedCreators = [...creators, newCreator]
-    onCreatorsUpdate(updatedCreators)
+    const updatedCreators = [...safeCreators, newCreator]
+    onCreatorsUpdate?.(updatedCreators)
+    setSelectedCreator(newCreator)
     setIsCreating(false)
     setEditForm({})
-    setSelectedCreator(newCreator)
     success('Creator added successfully')
-    
-    // Notify parent component to close modal if needed
-    if (onAddCreatorClose) {
-      onAddCreatorClose()
-    }
+    onAddCreatorClose?.()
     
     // Emit sync event
     syncService.emitSyncEvent({
@@ -222,14 +209,13 @@ export default function CreatorManagement({
       lastUpdated: new Date().toISOString().split('T')[0]
     }
 
-    const updatedCreators = creators.map(creator =>
+    const updatedCreators = safeCreators.map(creator =>
       creator.id === selectedCreator.id ? updatedCreator : creator
     )
 
-    onCreatorsUpdate(updatedCreators)
+    onCreatorsUpdate?.(updatedCreators)
     setSelectedCreator(updatedCreator)
     setIsEditing(false)
-    setEditForm({})
     success('Creator updated successfully')
     
     // Emit sync event
@@ -241,12 +227,12 @@ export default function CreatorManagement({
   }
 
   const handleDeleteCreator = (creatorId: number) => {
-    if (confirm('Are you sure you want to delete this creator? This action cannot be undone.')) {
-      const updatedCreators = creators.filter(creator => creator.id !== creatorId)
-      onCreatorsUpdate(updatedCreators)
+    if (confirm('Are you sure you want to delete this creator?')) {
+      const updatedCreators = safeCreators.filter(creator => creator.id !== creatorId)
+      onCreatorsUpdate?.(updatedCreators)
       
       if (selectedCreator?.id === creatorId) {
-        setSelectedCreator(updatedCreators.length > 0 ? updatedCreators[0] : null)
+        setSelectedCreator(updatedCreators[0] || null)
       }
       
       success('Creator deleted successfully')
@@ -267,7 +253,7 @@ export default function CreatorManagement({
     const activePhase = phases.find(phase => phase.isActive)
     if (!activePhase) return
 
-    // Update creator with new phase info
+    // Update creator with new phase data
     const updatedCreator = {
       ...selectedCreator,
       phase: `Phase ${activePhase.id}: ${activePhase.name}`,
@@ -275,13 +261,13 @@ export default function CreatorManagement({
       nextTask: activePhase.tasks[0]?.title || 'Complete phase tasks'
     }
 
-    const updatedCreators = creators.map(creator =>
+    const updatedCreators = safeCreators.map(creator =>
       creator.id === selectedCreator.id ? updatedCreator : creator
     )
 
-    onCreatorsUpdate(updatedCreators)
+    onCreatorsUpdate?.(updatedCreators)
     setSelectedCreator(updatedCreator)
-    success(`Phase updated to ${updatedCreator.phase}`)
+    success('Phases updated successfully')
     
     // Emit sync event
     syncService.emitSyncEvent({
@@ -300,11 +286,11 @@ export default function CreatorManagement({
       lastUpdated: new Date().toISOString().split('T')[0]
     }
 
-    const updatedCreators = creators.map(creator =>
+    const updatedCreators = safeCreators.map(creator =>
       creator.id === selectedCreator.id ? updatedCreator : creator
     )
 
-    onCreatorsUpdate(updatedCreators)
+    onCreatorsUpdate?.(updatedCreators)
     setSelectedCreator(updatedCreator)
     
     // Emit sync event
@@ -327,11 +313,11 @@ export default function CreatorManagement({
       lastUpdated: new Date().toISOString().split('T')[0]
     }
 
-    const updatedCreators = creators.map(creator =>
+    const updatedCreators = safeCreators.map(creator =>
       creator.id === selectedCreator.id ? updatedCreator : creator
     )
 
-    onCreatorsUpdate(updatedCreators)
+    onCreatorsUpdate?.(updatedCreators)
     setSelectedCreator(updatedCreator)
     
     // Emit sync event
@@ -356,40 +342,21 @@ export default function CreatorManagement({
   const cancelCreating = () => {
     setIsCreating(false)
     setEditForm({})
-    if (onAddCreatorClose) {
-      onAddCreatorClose()
-    }
+    onAddCreatorClose?.()
   }
 
-  const filteredCreators = creators.filter(creator => {
-    const matchesSearch = creator.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         creator.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         creator.category.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesCategory = filterCategory === 'all' || creator.category === filterCategory
-    const matchesPhase = filterPhase === 'all' || creator.phaseNumber.toString() === filterPhase
-    return matchesSearch && matchesCategory && matchesPhase
-  })
-
   const getPhaseColor = (phaseNumber: number) => {
-    const colors = {
-      0: "bg-blue-100 text-blue-800",
-      1: "bg-yellow-100 text-yellow-800",
-      2: "bg-green-100 text-green-800",
-      3: "bg-orange-100 text-orange-800",
-      4: "bg-purple-100 text-purple-800"
-    }
-    return colors[phaseNumber as keyof typeof colors] || "bg-gray-100 text-gray-800"
+    const colors = ["blue", "yellow", "green", "orange", "purple"]
+    return colors[phaseNumber] || "gray"
   }
 
   const getVelocityColor = (velocity: string) => {
-    const colors = {
-      'High': "bg-green-100 text-green-800",
-      'Medium': "bg-yellow-100 text-yellow-800",
-      'Low': "bg-red-100 text-red-800",
-      'Pending': "bg-gray-100 text-gray-800",
-      'Very High': "bg-green-100 text-green-800"
+    switch (velocity) {
+      case 'High': return 'bg-green-100 text-green-800'
+      case 'Medium': return 'bg-yellow-100 text-yellow-800'
+      case 'Low': return 'bg-red-100 text-red-800'
+      default: return 'bg-gray-100 text-gray-800'
     }
-    return colors[velocity as keyof typeof colors] || "bg-gray-100 text-gray-800"
   }
 
   return (
@@ -402,7 +369,7 @@ export default function CreatorManagement({
         <div className="flex space-x-2">
           <Button onClick={() => setShowCategoryManager(true)} variant="outline">
             <Tag className="w-4 h-4 mr-2" />
-            Manage Categories
+            Categories
           </Button>
           <Button onClick={() => setIsCreating(true)}>
             <Plus className="w-4 h-4 mr-2" />
@@ -411,695 +378,679 @@ export default function CreatorManagement({
         </div>
       </div>
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1">
-              <Input
-                placeholder="Search creators..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <Select value={filterCategory} onValueChange={setFilterCategory}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="All Categories" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Categories</SelectItem>
-                {categories.map((category) => (
-                  <SelectItem key={category.id} value={category.name}>
-                    {category.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={filterPhase} onValueChange={setFilterPhase}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="All Phases" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Phases</SelectItem>
-                <SelectItem value="0">Phase 0: Strategy Call</SelectItem>
-                <SelectItem value="1">Phase 1: Drop Prep</SelectItem>
-                <SelectItem value="2">Phase 2: Launch Week</SelectItem>
-                <SelectItem value="3">Phase 3: Sell-Out Push</SelectItem>
-                <SelectItem value="4">Phase 4: Post-Sellout</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
-
-      {isCreating ? (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Add New Creator</CardTitle>
-              <Button variant="outline" size="sm" onClick={cancelCreating}>
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">Name *</label>
-                <Input
-                  value={editForm.name || ''}
-                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                  placeholder="Creator name"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Avatar</label>
-                <Input
-                  value={editForm.avatar || ''}
-                  onChange={(e) => setEditForm({ ...editForm, avatar: e.target.value })}
-                  placeholder="👤"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Email</label>
-                <Input
-                  type="email"
-                  value={editForm.email || ''}
-                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                  placeholder="creator@example.com"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Phone</label>
-                <Input
-                  value={editForm.phone || ''}
-                  onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-                  placeholder="+1 (555) 123-4567"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Category *</label>
-                <Select
-                  value={editForm.category || 'Gaming'}
-                  onValueChange={(value) => setEditForm({ ...editForm, category: value })}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* Creator List */}
+        <div className="lg:col-span-1">
+          <Card>
+            <CardHeader>
+              <CardTitle>Creators ({safeCreators.length})</CardTitle>
+              <CardDescription>Select a creator to view details</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {safeCreators.map((creator) => (
+                <div
+                  key={creator.id}
+                  className={`p-3 border rounded-lg cursor-pointer transition-colors ${
+                    selectedCreator?.id === creator.id
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                  onClick={() => setSelectedCreator(creator)}
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map((category) => (
-                      <SelectItem key={category.id} value={category.name}>
-                        {category.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Region</label>
-                <Select
-                  value={editForm.region || 'US'}
-                  onValueChange={(value) => setEditForm({ ...editForm, region: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select region" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {regions.map((region) => (
-                      <SelectItem key={region.value} value={region.value}>
-                        {region.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Card Price</label>
-                <Input
-                  type="number"
-                  value={editForm.cardPrice || 100}
-                  onChange={(e) => setEditForm({ ...editForm, cardPrice: Number(e.target.value) })}
-                  placeholder="100"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Total Cards</label>
-                <Input
-                  type="number"
-                  value={editForm.totalCards || 100}
-                  onChange={(e) => setEditForm({ ...editForm, totalCards: Number(e.target.value) })}
-                  placeholder="100"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">Bio</label>
-              <Textarea
-                value={editForm.bio || ''}
-                onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
-                placeholder="Creator bio and description"
-                rows={3}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">Instagram</label>
-                <Input
-                  value={editForm.socialMedia?.instagram || ''}
-                  onChange={(e) => setEditForm({
-                    ...editForm,
-                    socialMedia: { ...editForm.socialMedia, instagram: e.target.value }
-                  })}
-                  placeholder="@username"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Twitter</label>
-                <Input
-                  value={editForm.socialMedia?.twitter || ''}
-                  onChange={(e) => setEditForm({
-                    ...editForm,
-                    socialMedia: { ...editForm.socialMedia, twitter: e.target.value }
-                  })}
-                  placeholder="@username"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">YouTube</label>
-                <Input
-                  value={editForm.socialMedia?.youtube || ''}
-                  onChange={(e) => setEditForm({
-                    ...editForm,
-                    socialMedia: { ...editForm.socialMedia, youtube: e.target.value }
-                  })}
-                  placeholder="@channel"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">TikTok</label>
-                <Input
-                  value={editForm.socialMedia?.tiktok || ''}
-                  onChange={(e) => setEditForm({
-                    ...editForm,
-                    socialMedia: { ...editForm.socialMedia, tiktok: e.target.value }
-                  })}
-                  placeholder="@username"
-                />
-              </div>
-            </div>
-
-            <div className="flex space-x-3">
-              <Button onClick={handleCreateCreator} disabled={!editForm.name || !editForm.category}>
-                <Save className="w-4 h-4 mr-2" />
-                Create Creator
-              </Button>
-              <Button variant="outline" onClick={cancelCreating}>
-                Cancel
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Creator List */}
-          <div className="lg:col-span-1">
-            <Card>
-              <CardHeader>
-                <CardTitle>Creators ({filteredCreators.length})</CardTitle>
-                <CardDescription>Select a creator to view details</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {filteredCreators.map((creator) => (
-                  <div
-                    key={creator.id}
-                    className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                      selectedCreator?.id === creator.id
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                    onClick={() => setSelectedCreator(creator)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <span className="text-lg">{creator.avatar}</span>
-                        <div>
-                          <h4 className="font-medium">{creator.name}</h4>
-                          <p className="text-xs text-gray-600">{creator.category}</p>
-                        </div>
-                      </div>
-                      <Badge className={getPhaseColor(creator.phaseNumber)}>
-                        Phase {creator.phaseNumber}
-                      </Badge>
-                    </div>
-                    <div className="mt-2">
-                      <div className="flex justify-between text-xs text-gray-500">
-                        <span>{creator.cardsSold}/{creator.totalCards} cards</span>
-                        <span>${(creator.cardsSold * creator.cardPrice).toLocaleString()}</span>
-                      </div>
-                      <Progress value={(creator.cardsSold / creator.totalCards) * 100} className="h-1 mt-1" />
-                    </div>
-                  </div>
-                ))}
-                {filteredCreators.length === 0 && (
-                  <div className="text-center py-8 text-gray-500">
-                    <User className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                    <p className="text-sm">No creators found</p>
-                    <Button size="sm" className="mt-2" onClick={() => setIsCreating(true)}>
-                      <Plus className="w-3 h-3 mr-1" />
-                      Add First Creator
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Creator Details */}
-          <div className="lg:col-span-3">
-            {selectedCreator ? (
-              <Card>
-                <CardHeader>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
-                      <span className="text-3xl">{selectedCreator.avatar}</span>
+                      <div className="text-2xl">{creator.avatar}</div>
                       <div>
-                        <CardTitle className="text-2xl">{selectedCreator.name}</CardTitle>
-                        <div className="flex items-center space-x-2 mt-1">
-                          <Badge variant="outline">
-                            {selectedCreator.category}
-                          </Badge>
-                          <Badge className={getPhaseColor(selectedCreator.phaseNumber)}>
-                            {selectedCreator.phase}
-                          </Badge>
+                        <h4 className="font-medium">{creator.name}</h4>
+                        <p className="text-sm text-gray-600">{creator.category}</p>
+                      </div>
+                    </div>
+                    <Badge
+                      className={`bg-${getPhaseColor(creator.phaseNumber)}-100 text-${getPhaseColor(creator.phaseNumber)}-800`}
+                    >
+                      Phase {creator.phaseNumber}
+                    </Badge>
+                  </div>
+                  <div className="mt-2">
+                    <div className="flex justify-between text-xs text-gray-500">
+                      <span>{creator.cardsSold}/100 cards</span>
+                      <span>${(creator.cardsSold * creator.cardPrice).toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {safeCreators.length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  <User className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                  <p className="text-sm">No creators yet</p>
+                  <Button size="sm" className="mt-2" onClick={() => setIsCreating(true)}>
+                    <Plus className="w-3 h-3 mr-1" />
+                    Add First Creator
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Creator Details */}
+        <div className="lg:col-span-3">
+          {isCreating ? (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Add New Creator</CardTitle>
+                  <Button variant="outline" size="sm" onClick={cancelCreating}>
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Name *</label>
+                    <Input
+                      value={editForm.name || ''}
+                      onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                      placeholder="Creator name"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Category *</label>
+                    <div className="flex space-x-2">
+                      <Select
+                        value={editForm.category || ''}
+                        onValueChange={(value) => setEditForm({ ...editForm, category: value })}
+                      >
+                        <SelectTrigger className="flex-1">
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {getCategoryNames().map((category) => (
+                            <SelectItem key={category} value={category}>
+                              {category}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setShowCategoryManager(true)}
+                      >
+                        <Settings className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Email</label>
+                    <Input
+                      type="email"
+                      value={editForm.email || ''}
+                      onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                      placeholder="creator@example.com"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Phone</label>
+                    <Input
+                      value={editForm.phone || ''}
+                      onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                      placeholder="+1 (555) 123-4567"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Region</label>
+                    <Select
+                      value={editForm.region || 'US'}
+                      onValueChange={(value) => setEditForm({ ...editForm, region: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select region" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {regions.map((region) => (
+                          <SelectItem key={region.value} value={region.value}>
+                            {region.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Avatar</label>
+                    <Input
+                      value={editForm.avatar || '👤'}
+                      onChange={(e) => setEditForm({ ...editForm, avatar: e.target.value })}
+                      placeholder="Emoji or URL"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Card Price</label>
+                    <Input
+                      type="number"
+                      value={editForm.cardPrice || 100}
+                      onChange={(e) => setEditForm({ ...editForm, cardPrice: Number(e.target.value) })}
+                      placeholder="100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Total Cards</label>
+                    <Input
+                      type="number"
+                      value={editForm.totalCards || 100}
+                      onChange={(e) => setEditForm({ ...editForm, totalCards: Number(e.target.value) })}
+                      placeholder="100"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Bio</label>
+                  <Textarea
+                    value={editForm.bio || ''}
+                    onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
+                    placeholder="Creator bio and description"
+                    rows={3}
+                  />
+                </div>
+
+                <div>
+                  <h4 className="font-medium mb-3">Social Media</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="flex items-center text-sm font-medium mb-2">
+                        <InstagramIcon className="w-4 h-4 mr-2" />
+                        Instagram
+                      </label>
+                      <Input
+                        value={editForm.socialMedia?.instagram || ''}
+                        onChange={(e) => setEditForm({
+                          ...editForm,
+                          socialMedia: { ...editForm.socialMedia, instagram: e.target.value }
+                        })}
+                        placeholder="@username"
+                      />
+                    </div>
+                    <div>
+                      <label className="flex items-center text-sm font-medium mb-2">
+                        <TwitterIcon className="w-4 h-4 mr-2" />
+                        Twitter
+                      </label>
+                      <Input
+                        value={editForm.socialMedia?.twitter || ''}
+                        onChange={(e) => setEditForm({
+                          ...editForm,
+                          socialMedia: { ...editForm.socialMedia, twitter: e.target.value }
+                        })}
+                        placeholder="@username"
+                      />
+                    </div>
+                    <div>
+                      <label className="flex items-center text-sm font-medium mb-2">
+                        <YouTubeIcon className="w-4 h-4 mr-2" />
+                        YouTube
+                      </label>
+                      <Input
+                        value={editForm.socialMedia?.youtube || ''}
+                        onChange={(e) => setEditForm({
+                          ...editForm,
+                          socialMedia: { ...editForm.socialMedia, youtube: e.target.value }
+                        })}
+                        placeholder="@channel"
+                      />
+                    </div>
+                    <div>
+                      <label className="flex items-center text-sm font-medium mb-2">
+                        <TikTokIcon className="w-4 h-4 mr-2" />
+                        TikTok
+                      </label>
+                      <Input
+                        value={editForm.socialMedia?.tiktok || ''}
+                        onChange={(e) => setEditForm({
+                          ...editForm,
+                          socialMedia: { ...editForm.socialMedia, tiktok: e.target.value }
+                        })}
+                        placeholder="@username"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex space-x-3">
+                  <Button onClick={handleCreateCreator} disabled={!editForm.name || !editForm.category}>
+                    <Save className="w-4 h-4 mr-2" />
+                    Create Creator
+                  </Button>
+                  <Button variant="outline" onClick={cancelCreating}>
+                    Cancel
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : selectedCreator ? (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="text-3xl">{selectedCreator.avatar}</div>
+                    <div>
+                      <CardTitle className="text-2xl">{selectedCreator.name}</CardTitle>
+                      <div className="flex items-center space-x-2 mt-1">
+                        <Badge variant="outline">
+                          {selectedCreator.category}
+                        </Badge>
+                        <Badge
+                          className={`bg-${getPhaseColor(selectedCreator.phaseNumber)}-100 text-${getPhaseColor(selectedCreator.phaseNumber)}-800`}
+                        >
+                          {selectedCreator.phase}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex space-x-2">
+                    <Button variant="outline" size="sm" onClick={startEditing}>
+                      <Edit className="w-4 h-4 mr-2" />
+                      Edit
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDeleteCreator(selectedCreator.id)}
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {isEditing ? (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Name</label>
+                        <Input
+                          value={editForm.name || ''}
+                          onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Category</label>
+                        <div className="flex space-x-2">
+                          <Select
+                            value={editForm.category || ''}
+                            onValueChange={(value) => setEditForm({ ...editForm, category: value })}
+                          >
+                            <SelectTrigger className="flex-1">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {getCategoryNames().map((category) => (
+                                <SelectItem key={category} value={category}>
+                                  {category}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => setShowCategoryManager(true)}
+                          >
+                            <Settings className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Email</label>
+                        <Input
+                          type="email"
+                          value={editForm.email || ''}
+                          onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Phone</label>
+                        <Input
+                          value={editForm.phone || ''}
+                          onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Region</label>
+                        <Select
+                          value={editForm.region || 'US'}
+                          onValueChange={(value) => setEditForm({ ...editForm, region: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {regions.map((region) => (
+                              <SelectItem key={region.value} value={region.value}>
+                                {region.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Avatar</label>
+                        <Input
+                          value={editForm.avatar || ''}
+                          onChange={(e) => setEditForm({ ...editForm, avatar: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Cards Sold</label>
+                        <Input
+                          type="number"
+                          value={editForm.cardsSold}
+                          onChange={(e) => setEditForm({ ...editForm, cardsSold: Number(e.target.value) })}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Card Price</label>
+                        <Input
+                          type="number"
+                          value={editForm.cardPrice}
+                          onChange={(e) => setEditForm({ ...editForm, cardPrice: Number(e.target.value) })}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Sales Velocity</label>
+                        <Select
+                          value={editForm.salesVelocity || 'Pending'}
+                          onValueChange={(value) => setEditForm({ ...editForm, salesVelocity: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {velocities.map((velocity) => (
+                              <SelectItem key={velocity.value} value={velocity.value}>
+                                {velocity.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Next Task</label>
+                        <Input
+                          value={editForm.nextTask || ''}
+                          onChange={(e) => setEditForm({ ...editForm, nextTask: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Bio</label>
+                      <Textarea
+                        value={editForm.bio || ''}
+                        onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
+                        rows={3}
+                      />
+                    </div>
+
+                    <div>
+                      <h4 className="font-medium mb-3">Social Media</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="flex items-center text-sm font-medium mb-2">
+                            <InstagramIcon className="w-4 h-4 mr-2" />
+                            Instagram
+                          </label>
+                          <Input
+                            value={editForm.socialMedia?.instagram || ''}
+                            onChange={(e) => setEditForm({
+                              ...editForm,
+                              socialMedia: { ...editForm.socialMedia, instagram: e.target.value }
+                            })}
+                          />
+                        </div>
+                        <div>
+                          <label className="flex items-center text-sm font-medium mb-2">
+                            <TwitterIcon className="w-4 h-4 mr-2" />
+                            Twitter
+                          </label>
+                          <Input
+                            value={editForm.socialMedia?.twitter || ''}
+                            onChange={(e) => setEditForm({
+                              ...editForm,
+                              socialMedia: { ...editForm.socialMedia, twitter: e.target.value }
+                            })}
+                          />
+                        </div>
+                        <div>
+                          <label className="flex items-center text-sm font-medium mb-2">
+                            <YouTubeIcon className="w-4 h-4 mr-2" />
+                            YouTube
+                          </label>
+                          <Input
+                            value={editForm.socialMedia?.youtube || ''}
+                            onChange={(e) => setEditForm({
+                              ...editForm,
+                              socialMedia: { ...editForm.socialMedia, youtube: e.target.value }
+                            })}
+                          />
+                        </div>
+                        <div>
+                          <label className="flex items-center text-sm font-medium mb-2">
+                            <TikTokIcon className="w-4 h-4 mr-2" />
+                            TikTok
+                          </label>
+                          <Input
+                            value={editForm.socialMedia?.tiktok || ''}
+                            onChange={(e) => setEditForm({
+                              ...editForm,
+                              socialMedia: { ...editForm.socialMedia, tiktok: e.target.value }
+                            })}
+                          />
                         </div>
                       </div>
                     </div>
-                    <div className="flex space-x-2">
-                      {isEditing ? (
-                        <>
-                          <Button onClick={handleUpdateCreator}>
-                            <Save className="w-4 h-4 mr-2" />
-                            Save
-                          </Button>
-                          <Button variant="outline" onClick={cancelEditing}>
-                            Cancel
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          <Button variant="outline" onClick={startEditing}>
-                            <Edit className="w-4 h-4 mr-2" />
-                            Edit
-                          </Button>
-                          <Button
-                            variant="outline"
-                            onClick={() => handleDeleteCreator(selectedCreator.id)}
-                            className="text-red-600 hover:text-red-700"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </>
-                      )}
+
+                    <div>
+                      <h4 className="font-medium mb-3">Strategy</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Launch Date</label>
+                          <Input
+                            type="date"
+                            value={editForm.strategy?.launchDate || ''}
+                            onChange={(e) => setEditForm({
+                              ...editForm,
+                              strategy: { ...editForm.strategy, launchDate: e.target.value }
+                            })}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Target Audience</label>
+                          <Input
+                            value={editForm.strategy?.targetAudience || ''}
+                            onChange={(e) => setEditForm({
+                              ...editForm,
+                              strategy: { ...editForm.strategy, targetAudience: e.target.value }
+                            })}
+                          />
+                        </div>
+                      </div>
+                      <div className="mt-3">
+                        <label className="block text-sm font-medium mb-2">Content Plan</label>
+                        <Textarea
+                          value={editForm.strategy?.contentPlan || ''}
+                          onChange={(e) => setEditForm({
+                            ...editForm,
+                            strategy: { ...editForm.strategy, contentPlan: e.target.value }
+                          })}
+                          rows={2}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex space-x-3">
+                      <Button onClick={handleUpdateCreator}>
+                        <Save className="w-4 h-4 mr-2" />
+                        Save Changes
+                      </Button>
+                      <Button variant="outline" onClick={cancelEditing}>
+                        Cancel
+                      </Button>
                     </div>
                   </div>
-                </CardHeader>
-                <CardContent>
+                ) : (
                   <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
                     <TabsList>
                       <TabsTrigger value="profile">Profile</TabsTrigger>
-                      <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
+                      <TabsTrigger value="phases">Phases</TabsTrigger>
                       <TabsTrigger value="assets">Assets</TabsTrigger>
                       <TabsTrigger value="strategy">Strategy</TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="profile">
-                      {isEditing ? (
-                        <div className="space-y-6">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                              <label className="block text-sm font-medium mb-2">Name</label>
-                              <Input
-                                value={editForm.name || ''}
-                                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium mb-2">Avatar</label>
-                              <Input
-                                value={editForm.avatar || ''}
-                                onChange={(e) => setEditForm({ ...editForm, avatar: e.target.value })}
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium mb-2">Email</label>
-                              <Input
-                                type="email"
-                                value={editForm.email || ''}
-                                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium mb-2">Phone</label>
-                              <Input
-                                value={editForm.phone || ''}
-                                onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium mb-2">Category</label>
-                              <Select
-                                value={editForm.category || ''}
-                                onValueChange={(value) => setEditForm({ ...editForm, category: value })}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {categories.map((category) => (
-                                    <SelectItem key={category.id} value={category.name}>
-                                      {category.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium mb-2">Region</label>
-                              <Select
-                                value={editForm.region || ''}
-                                onValueChange={(value) => setEditForm({ ...editForm, region: value })}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {regions.map((region) => (
-                                    <SelectItem key={region.value} value={region.value}>
-                                      {region.label}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                      <div className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <h4 className="font-medium mb-3">Contact Information</h4>
+                            <div className="space-y-3">
+                              <div className="flex items-center space-x-3">
+                                <Mail className="w-4 h-4 text-gray-500" />
+                                <span>{selectedCreator.email || 'No email provided'}</span>
+                              </div>
+                              <div className="flex items-center space-x-3">
+                                <Phone className="w-4 h-4 text-gray-500" />
+                                <span>{selectedCreator.phone || 'No phone provided'}</span>
+                              </div>
+                              <div className="flex items-center space-x-3">
+                                <User className="w-4 h-4 text-gray-500" />
+                                <span>Region: {regions.find(r => r.value === selectedCreator.region)?.label || selectedCreator.region}</span>
+                              </div>
                             </div>
                           </div>
 
                           <div>
-                            <label className="block text-sm font-medium mb-2">Bio</label>
-                            <Textarea
-                              value={editForm.bio || ''}
-                              onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
-                              rows={3}
-                            />
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                              <label className="block text-sm font-medium mb-2">Instagram</label>
-                              <Input
-                                value={editForm.socialMedia?.instagram || ''}
-                                onChange={(e) => setEditForm({
-                                  ...editForm,
-                                  socialMedia: { ...editForm.socialMedia, instagram: e.target.value }
-                                })}
-                                placeholder="@username"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium mb-2">Twitter</label>
-                              <Input
-                                value={editForm.socialMedia?.twitter || ''}
-                                onChange={(e) => setEditForm({
-                                  ...editForm,
-                                  socialMedia: { ...editForm.socialMedia, twitter: e.target.value }
-                                })}
-                                placeholder="@username"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium mb-2">YouTube</label>
-                              <Input
-                                value={editForm.socialMedia?.youtube || ''}
-                                onChange={(e) => setEditForm({
-                                  ...editForm,
-                                  socialMedia: { ...editForm.socialMedia, youtube: e.target.value }
-                                })}
-                                placeholder="@channel"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium mb-2">TikTok</label>
-                              <Input
-                                value={editForm.socialMedia?.tiktok || ''}
-                                onChange={(e) => setEditForm({
-                                  ...editForm,
-                                  socialMedia: { ...editForm.socialMedia, tiktok: e.target.value }
-                                })}
-                                placeholder="@username"
-                              />
+                            <h4 className="font-medium mb-3">Pipeline Status</h4>
+                            <div className="space-y-3">
+                              <div className="flex items-center space-x-3">
+                                <Calendar className="w-4 h-4 text-gray-500" />
+                                <span>Day {selectedCreator.daysInPhase} in {selectedCreator.phase}</span>
+                              </div>
+                              <div className="flex items-center space-x-3">
+                                <DollarSign className="w-4 h-4 text-gray-500" />
+                                <span>{selectedCreator.cardsSold}/{selectedCreator.totalCards} cards sold (${(selectedCreator.cardsSold * selectedCreator.cardPrice).toLocaleString()})</span>
+                              </div>
+                              <div className="flex items-center space-x-3">
+                                <Badge className={getVelocityColor(selectedCreator.salesVelocity)}>
+                                  {selectedCreator.salesVelocity} Velocity
+                                </Badge>
+                              </div>
                             </div>
                           </div>
                         </div>
-                      ) : (
-                        <div className="space-y-6">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                              <h3 className="text-lg font-semibold mb-3">Contact Information</h3>
-                              <div className="space-y-3">
-                                <div className="flex items-center space-x-3">
-                                  <Mail className="w-4 h-4 text-gray-500" />
-                                  <span>{selectedCreator.email || 'No email provided'}</span>
-                                </div>
-                                <div className="flex items-center space-x-3">
-                                  <Phone className="w-4 h-4 text-gray-500" />
-                                  <span>{selectedCreator.phone || 'No phone provided'}</span>
-                                </div>
-                                <div className="flex items-center space-x-3">
-                                  <User className="w-4 h-4 text-gray-500" />
-                                  <span>{selectedCreator.region}</span>
-                                </div>
-                              </div>
-                            </div>
 
-                            <div>
-                              <h3 className="text-lg font-semibold mb-3">Performance</h3>
-                              <div className="space-y-3">
-                                <div>
-                                  <div className="flex justify-between text-sm">
-                                    <span>Cards Sold</span>
-                                    <span>{selectedCreator.cardsSold}/{selectedCreator.totalCards}</span>
-                                  </div>
-                                  <Progress value={(selectedCreator.cardsSold / selectedCreator.totalCards) * 100} className="h-2" />
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-sm">Revenue</span>
-                                  <span className="font-medium">${(selectedCreator.cardsSold * selectedCreator.cardPrice).toLocaleString()}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-sm">Sales Velocity</span>
-                                  <Badge className={getVelocityColor(selectedCreator.salesVelocity)}>
-                                    {selectedCreator.salesVelocity}
-                                  </Badge>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
+                        <div>
+                          <h4 className="font-medium mb-3">Bio</h4>
+                          <p className="text-gray-700">{selectedCreator.bio || 'No bio provided'}</p>
+                        </div>
 
-                          <div>
-                            <h3 className="text-lg font-semibold mb-3">Bio</h3>
-                            <p className="text-gray-700">{selectedCreator.bio || 'No bio provided'}</p>
-                          </div>
-
-                          <div>
-                            <h3 className="text-lg font-semibold mb-3">Social Media</h3>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                              <a
-                                href={selectedCreator.socialMedia.instagram?.startsWith('http') ? selectedCreator.socialMedia.instagram : `https://instagram.com/${selectedCreator.socialMedia.instagram?.replace('@', '')}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className={`flex items-center space-x-2 p-3 border rounded-lg hover:bg-gray-50 ${!selectedCreator.socialMedia.instagram ? 'opacity-50 pointer-events-none' : ''}`}
-                              >
+                        <div>
+                          <h4 className="font-medium mb-3">Social Media</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {selectedCreator.socialMedia.instagram && (
+                              <div className="flex items-center space-x-3">
                                 <InstagramIcon className="w-5 h-5" />
-                                <span className="text-sm">{selectedCreator.socialMedia.instagram || 'Not linked'}</span>
-                              </a>
-                              <a
-                                href={selectedCreator.socialMedia.twitter?.startsWith('http') ? selectedCreator.socialMedia.twitter : `https://twitter.com/${selectedCreator.socialMedia.twitter?.replace('@', '')}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className={`flex items-center space-x-2 p-3 border rounded-lg hover:bg-gray-50 ${!selectedCreator.socialMedia.twitter ? 'opacity-50 pointer-events-none' : ''}`}
-                              >
+                                <a
+                                  href={selectedCreator.socialMedia.instagram.startsWith('http')
+                                    ? selectedCreator.socialMedia.instagram
+                                    : `https://instagram.com/${selectedCreator.socialMedia.instagram.replace('@', '')}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:underline"
+                                >
+                                  {selectedCreator.socialMedia.instagram}
+                                </a>
+                              </div>
+                            )}
+                            {selectedCreator.socialMedia.twitter && (
+                              <div className="flex items-center space-x-3">
                                 <TwitterIcon className="w-5 h-5" />
-                                <span className="text-sm">{selectedCreator.socialMedia.twitter || 'Not linked'}</span>
-                              </a>
-                              <a
-                                href={selectedCreator.socialMedia.youtube?.startsWith('http') ? selectedCreator.socialMedia.youtube : `https://youtube.com/${selectedCreator.socialMedia.youtube?.replace('@', '')}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className={`flex items-center space-x-2 p-3 border rounded-lg hover:bg-gray-50 ${!selectedCreator.socialMedia.youtube ? 'opacity-50 pointer-events-none' : ''}`}
-                              >
+                                <a
+                                  href={selectedCreator.socialMedia.twitter.startsWith('http')
+                                    ? selectedCreator.socialMedia.twitter
+                                    : `https://twitter.com/${selectedCreator.socialMedia.twitter.replace('@', '')}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:underline"
+                                >
+                                  {selectedCreator.socialMedia.twitter}
+                                </a>
+                              </div>
+                            )}
+                            {selectedCreator.socialMedia.youtube && (
+                              <div className="flex items-center space-x-3">
                                 <YouTubeIcon className="w-5 h-5" />
-                                <span className="text-sm">{selectedCreator.socialMedia.youtube || 'Not linked'}</span>
-                              </a>
-                              <a
-                                href={selectedCreator.socialMedia.tiktok?.startsWith('http') ? selectedCreator.socialMedia.tiktok : `https://tiktok.com/@${selectedCreator.socialMedia.tiktok?.replace('@', '')}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className={`flex items-center space-x-2 p-3 border rounded-lg hover:bg-gray-50 ${!selectedCreator.socialMedia.tiktok ? 'opacity-50 pointer-events-none' : ''}`}
-                              >
+                                <a
+                                  href={selectedCreator.socialMedia.youtube.startsWith('http')
+                                    ? selectedCreator.socialMedia.youtube
+                                    : `https://youtube.com/${selectedCreator.socialMedia.youtube.replace('@', '')}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:underline"
+                                >
+                                  {selectedCreator.socialMedia.youtube}
+                                </a>
+                              </div>
+                            )}
+                            {selectedCreator.socialMedia.tiktok && (
+                              <div className="flex items-center space-x-3">
                                 <TikTokIcon className="w-5 h-5" />
-                                <span className="text-sm">{selectedCreator.socialMedia.tiktok || 'Not linked'}</span>
-                              </a>
-                            </div>
-                          </div>
-
-                          <div className="flex justify-between items-center text-sm text-gray-500">
-                            <span>Created: {selectedCreator.createdAt}</span>
-                            <span>Last Updated: {selectedCreator.lastUpdated}</span>
+                                <a
+                                  href={selectedCreator.socialMedia.tiktok.startsWith('http')
+                                    ? selectedCreator.socialMedia.tiktok
+                                    : `https://tiktok.com/@${selectedCreator.socialMedia.tiktok.replace('@', '')}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:underline"
+                                >
+                                  {selectedCreator.socialMedia.tiktok}
+                                </a>
+                              </div>
+                            )}
+                            {!selectedCreator.socialMedia.instagram &&
+                             !selectedCreator.socialMedia.twitter &&
+                             !selectedCreator.socialMedia.youtube &&
+                             !selectedCreator.socialMedia.tiktok && (
+                              <p className="text-gray-500">No social media profiles provided</p>
+                            )}
                           </div>
                         </div>
-                      )}
+
+                        <div>
+                          <h4 className="font-medium mb-3">Current Task</h4>
+                          <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                            <p className="text-sm font-medium">{selectedCreator.nextTask}</p>
+                            <p className="text-xs text-gray-600 mt-1">
+                              Phase {selectedCreator.phaseNumber} • {selectedCreator.phase}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-between text-sm text-gray-500">
+                          <span>Created: {selectedCreator.createdAt}</span>
+                          <span>Last Updated: {selectedCreator.lastUpdated}</span>
+                        </div>
+                      </div>
                     </TabsContent>
 
-                    <TabsContent value="pipeline">
-                      {isEditing ? (
-                        <div className="space-y-6">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                              <label className="block text-sm font-medium mb-2">Phase</label>
-                              <Select
-                                value={editForm.phase || ''}
-                                onValueChange={(value) => {
-                                  const phaseNumber = parseInt(value.split(':')[0].replace('Phase ', ''), 10)
-                                  setEditForm({
-                                    ...editForm,
-                                    phase: value,
-                                    phaseNumber
-                                  })
-                                }}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="Phase 0: Strategy Call">Phase 0: Strategy Call</SelectItem>
-                                  <SelectItem value="Phase 1: Drop Prep">Phase 1: Drop Prep</SelectItem>
-                                  <SelectItem value="Phase 2: Launch Week">Phase 2: Launch Week</SelectItem>
-                                  <SelectItem value="Phase 3: Sell-Out Push">Phase 3: Sell-Out Push</SelectItem>
-                                  <SelectItem value="Phase 4: Post-Sellout">Phase 4: Post-Sellout</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium mb-2">Days in Phase</label>
-                              <Input
-                                type="number"
-                                value={editForm.daysInPhase || 0}
-                                onChange={(e) => setEditForm({ ...editForm, daysInPhase: Number(e.target.value) })}
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium mb-2">Cards Sold</label>
-                              <Input
-                                type="number"
-                                value={editForm.cardsSold || 0}
-                                onChange={(e) => setEditForm({ ...editForm, cardsSold: Number(e.target.value) })}
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium mb-2">Card Price</label>
-                              <Input
-                                type="number"
-                                value={editForm.cardPrice || 0}
-                                onChange={(e) => setEditForm({ ...editForm, cardPrice: Number(e.target.value) })}
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium mb-2">Sales Velocity</label>
-                              <Select
-                                value={editForm.salesVelocity || ''}
-                                onValueChange={(value) => setEditForm({ ...editForm, salesVelocity: value })}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {velocities.map((velocity) => (
-                                    <SelectItem key={velocity.value} value={velocity.value}>
-                                      {velocity.label}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium mb-2">Next Task</label>
-                              <Input
-                                value={editForm.nextTask || ''}
-                                onChange={(e) => setEditForm({ ...editForm, nextTask: e.target.value })}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="space-y-6">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                              <h3 className="text-lg font-semibold mb-3">Pipeline Status</h3>
-                              <div className="space-y-3">
-                                <div className="flex justify-between">
-                                  <span className="text-sm">Current Phase</span>
-                                  <Badge className={getPhaseColor(selectedCreator.phaseNumber)}>
-                                    {selectedCreator.phase}
-                                  </Badge>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-sm">Days in Phase</span>
-                                  <span className="font-medium">{selectedCreator.daysInPhase}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-sm">Next Task</span>
-                                  <span className="font-medium">{selectedCreator.nextTask}</span>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div>
-                              <h3 className="text-lg font-semibold mb-3">Sales Performance</h3>
-                              <div className="space-y-3">
-                                <div>
-                                  <div className="flex justify-between text-sm">
-                                    <span>Cards Sold</span>
-                                    <span>{selectedCreator.cardsSold}/{selectedCreator.totalCards}</span>
-                                  </div>
-                                  <Progress value={(selectedCreator.cardsSold / selectedCreator.totalCards) * 100} className="h-2" />
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-sm">Card Price</span>
-                                  <span className="font-medium">${selectedCreator.cardPrice}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-sm">Total Revenue</span>
-                                  <span className="font-medium">${(selectedCreator.cardsSold * selectedCreator.cardPrice).toLocaleString()}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-sm">Sales Velocity</span>
-                                  <Badge className={getVelocityColor(selectedCreator.salesVelocity)}>
-                                    {selectedCreator.salesVelocity}
-                                  </Badge>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-
-                          <PhaseManager
-                            creatorId={selectedCreator.id}
-                            creatorName={selectedCreator.name}
-                            currentPhase={selectedCreator.phaseNumber}
-                            onPhaseUpdate={handlePhaseUpdate}
-                          />
-                        </div>
-                      )}
+                    <TabsContent value="phases">
+                      <PhaseManager
+                        creatorId={selectedCreator.id}
+                        creatorName={selectedCreator.name}
+                        currentPhase={selectedCreator.phaseNumber}
+                        onPhaseUpdate={handlePhaseUpdate}
+                      />
                     </TabsContent>
 
                     <TabsContent value="assets">
@@ -1134,223 +1085,123 @@ export default function CreatorManagement({
                     </TabsContent>
 
                     <TabsContent value="strategy">
-                      {isEditing ? (
-                        <div className="space-y-6">
+                      <div className="space-y-6">
+                        <div>
+                          <h4 className="font-medium mb-3">Launch Strategy</h4>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                              <label className="block text-sm font-medium mb-2">Launch Date</label>
-                              <Input
-                                type="date"
-                                value={editForm.strategy?.launchDate || ''}
-                                onChange={(e) => setEditForm({
-                                  ...editForm,
-                                  strategy: { ...editForm.strategy, launchDate: e.target.value }
-                                })}
-                              />
+                              <p className="text-sm font-medium">Launch Date</p>
+                              <p className="text-gray-700">
+                                {selectedCreator.strategy.launchDate
+                                  ? new Date(selectedCreator.strategy.launchDate).toLocaleDateString()
+                                  : 'Not set'}
+                              </p>
                             </div>
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Target Audience</label>
-                            <Textarea
-                              value={editForm.strategy?.targetAudience || ''}
-                              onChange={(e) => setEditForm({
-                                ...editForm,
-                                strategy: { ...editForm.strategy, targetAudience: e.target.value }
-                              })}
-                              placeholder="Describe the target audience for this creator"
-                              rows={3}
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Content Plan</label>
-                            <Textarea
-                              value={editForm.strategy?.contentPlan || ''}
-                              onChange={(e) => setEditForm({
-                                ...editForm,
-                                strategy: { ...editForm.strategy, contentPlan: e.target.value }
-                              })}
-                              placeholder="Outline the content strategy and plan"
-                              rows={3}
-                            />
+                            <div>
+                              <p className="text-sm font-medium">Target Audience</p>
+                              <p className="text-gray-700">
+                                {selectedCreator.strategy.targetAudience || 'Not defined'}
+                              </p>
+                            </div>
                           </div>
                         </div>
-                      ) : (
-                        <div className="space-y-6">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                              <h3 className="text-lg font-semibold mb-3">Launch Strategy</h3>
-                              <div className="space-y-3">
-                                <div className="flex items-center space-x-3">
-                                  <Calendar className="w-4 h-4 text-gray-500" />
-                                  <div>
-                                    <span className="text-sm text-gray-600">Launch Date</span>
-                                    <p className="font-medium">
-                                      {selectedCreator.strategy.launchDate
-                                        ? new Date(selectedCreator.strategy.launchDate).toLocaleDateString()
-                                        : 'Not set'}
-                                    </p>
-                                  </div>
-                                </div>
-                                <div className="flex items-center space-x-3">
-                                  <Target className="w-4 h-4 text-gray-500" />
-                                  <div>
-                                    <span className="text-sm text-gray-600">Target Audience</span>
-                                    <p className="font-medium">
-                                      {selectedCreator.strategy.targetAudience || 'Not defined'}
-                                    </p>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
 
-                            <div>
-                              <h3 className="text-lg font-semibold mb-3">Content Strategy</h3>
-                              <div className="p-4 bg-gray-50 rounded-lg">
-                                <p className="text-gray-700">
-                                  {selectedCreator.strategy.contentPlan || 'No content plan defined yet.'}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
+                        <div>
+                          <h4 className="font-medium mb-3">Content Plan</h4>
+                          <p className="text-gray-700">
+                            {selectedCreator.strategy.contentPlan || 'No content plan defined'}
+                          </p>
+                        </div>
 
-                          <div>
-                            <h3 className="text-lg font-semibold mb-3">Phase-Specific Strategy</h3>
-                            <div className="p-4 bg-gray-50 rounded-lg">
+                        <div>
+                          <h4 className="font-medium mb-3">Recommended Next Steps</h4>
+                          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                            <ul className="space-y-2">
                               {selectedCreator.phaseNumber === 0 && (
-                                <div>
-                                  <h4 className="font-medium mb-2">Strategy Call Phase</h4>
-                                  <p className="text-gray-700 mb-3">
-                                    Focus on understanding the creator's goals, audience, and content style. Define pricing strategy and launch timeline.
-                                  </p>
-                                  <div className="space-y-2">
-                                    <div className="flex items-start">
-                                      <CheckCircle2 className="w-4 h-4 text-green-500 mr-2 mt-0.5" />
-                                      <span className="text-sm">Complete initial strategy call</span>
-                                    </div>
-                                    <div className="flex items-start">
-                                      <CheckCircle2 className="w-4 h-4 text-green-500 mr-2 mt-0.5" />
-                                      <span className="text-sm">Define target audience and pricing</span>
-                                    </div>
-                                    <div className="flex items-start">
-                                      <CheckCircle2 className="w-4 h-4 text-green-500 mr-2 mt-0.5" />
-                                      <span className="text-sm">Create content calendar for launch</span>
-                                    </div>
-                                  </div>
-                                </div>
+                                <>
+                                  <li className="flex items-start">
+                                    <CheckCircle2 className="w-4 h-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
+                                    <span>Schedule initial strategy call</span>
+                                  </li>
+                                  <li className="flex items-start">
+                                    <CheckCircle2 className="w-4 h-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
+                                    <span>Define target audience and pricing strategy</span>
+                                  </li>
+                                </>
                               )}
                               {selectedCreator.phaseNumber === 1 && (
-                                <div>
-                                  <h4 className="font-medium mb-2">Drop Prep Phase</h4>
-                                  <p className="text-gray-700 mb-3">
-                                    Prepare all assets and content for launch. Build anticipation with teaser content and behind-the-scenes material.
-                                  </p>
-                                  <div className="space-y-2">
-                                    <div className="flex items-start">
-                                      <CheckCircle2 className="w-4 h-4 text-green-500 mr-2 mt-0.5" />
-                                      <span className="text-sm">Create teaser content</span>
-                                    </div>
-                                    <div className="flex items-start">
-                                      <CheckCircle2 className="w-4 h-4 text-green-500 mr-2 mt-0.5" />
-                                      <span className="text-sm">Prepare launch assets</span>
-                                    </div>
-                                    <div className="flex items-start">
-                                      <CheckCircle2 className="w-4 h-4 text-green-500 mr-2 mt-0.5" />
-                                      <span className="text-sm">Schedule content calendar</span>
-                                    </div>
-                                  </div>
-                                </div>
+                                <>
+                                  <li className="flex items-start">
+                                    <CheckCircle2 className="w-4 h-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
+                                    <span>Create teaser content for social media</span>
+                                  </li>
+                                  <li className="flex items-start">
+                                    <CheckCircle2 className="w-4 h-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
+                                    <span>Prepare launch assets and schedule content</span>
+                                  </li>
+                                </>
                               )}
                               {selectedCreator.phaseNumber === 2 && (
-                                <div>
-                                  <h4 className="font-medium mb-2">Launch Week Phase</h4>
-                                  <p className="text-gray-700 mb-3">
-                                    Execute launch strategy with high-impact content. Focus on community engagement and initial sales momentum.
-                                  </p>
-                                  <div className="space-y-2">
-                                    <div className="flex items-start">
-                                      <CheckCircle2 className="w-4 h-4 text-green-500 mr-2 mt-0.5" />
-                                      <span className="text-sm">Post launch announcement</span>
-                                    </div>
-                                    <div className="flex items-start">
-                                      <CheckCircle2 className="w-4 h-4 text-green-500 mr-2 mt-0.5" />
-                                      <span className="text-sm">Share group chat screenshots</span>
-                                    </div>
-                                    <div className="flex items-start">
-                                      <CheckCircle2 className="w-4 h-4 text-green-500 mr-2 mt-0.5" />
-                                      <span className="text-sm">Monitor sales progress</span>
-                                    </div>
-                                  </div>
-                                </div>
+                                <>
+                                  <li className="flex items-start">
+                                    <CheckCircle2 className="w-4 h-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
+                                    <span>Post daily engagement content</span>
+                                  </li>
+                                  <li className="flex items-start">
+                                    <CheckCircle2 className="w-4 h-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
+                                    <span>Share behind-the-scenes content</span>
+                                  </li>
+                                </>
                               )}
                               {selectedCreator.phaseNumber === 3 && (
-                                <div>
-                                  <h4 className="font-medium mb-2">Sell-Out Push Phase</h4>
-                                  <p className="text-gray-700 mb-3">
-                                    Create urgency with limited availability messaging. Showcase social proof and exclusive benefits.
-                                  </p>
-                                  <div className="space-y-2">
-                                    <div className="flex items-start">
-                                      <CheckCircle2 className="w-4 h-4 text-green-500 mr-2 mt-0.5" />
-                                      <span className="text-sm">Create urgency content</span>
-                                    </div>
-                                    <div className="flex items-start">
-                                      <CheckCircle2 className="w-4 h-4 text-green-500 mr-2 mt-0.5" />
-                                      <span className="text-sm">Share social proof</span>
-                                    </div>
-                                    <div className="flex items-start">
-                                      <CheckCircle2 className="w-4 h-4 text-green-500 mr-2 mt-0.5" />
-                                      <span className="text-sm">Final push campaign</span>
-                                    </div>
-                                  </div>
-                                </div>
+                                <>
+                                  <li className="flex items-start">
+                                    <CheckCircle2 className="w-4 h-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
+                                    <span>Create urgency with limited availability messaging</span>
+                                  </li>
+                                  <li className="flex items-start">
+                                    <CheckCircle2 className="w-4 h-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
+                                    <span>Share social proof and testimonials</span>
+                                  </li>
+                                </>
                               )}
                               {selectedCreator.phaseNumber === 4 && (
-                                <div>
-                                  <h4 className="font-medium mb-2">Post-Sellout Phase</h4>
-                                  <p className="text-gray-700 mb-3">
-                                    Deliver on promises to card holders. Gather feedback and plan for future opportunities.
-                                  </p>
-                                  <div className="space-y-2">
-                                    <div className="flex items-start">
-                                      <CheckCircle2 className="w-4 h-4 text-green-500 mr-2 mt-0.5" />
-                                      <span className="text-sm">Send thank you message</span>
-                                    </div>
-                                    <div className="flex items-start">
-                                      <CheckCircle2 className="w-4 h-4 text-green-500 mr-2 mt-0.5" />
-                                      <span className="text-sm">Deliver exclusive content</span>
-                                    </div>
-                                    <div className="flex items-start">
-                                      <CheckCircle2 className="w-4 h-4 text-green-500 mr-2 mt-0.5" />
-                                      <span className="text-sm">Plan next campaign</span>
-                                    </div>
-                                  </div>
-                                </div>
+                                <>
+                                  <li className="flex items-start">
+                                    <CheckCircle2 className="w-4 h-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
+                                    <span>Send thank you message to supporters</span>
+                                  </li>
+                                  <li className="flex items-start">
+                                    <CheckCircle2 className="w-4 h-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
+                                    <span>Deliver exclusive content to card holders</span>
+                                  </li>
+                                </>
                               )}
-                            </div>
+                            </ul>
                           </div>
                         </div>
-                      )}
+                      </div>
                     </TabsContent>
                   </Tabs>
-                </CardContent>
-              </Card>
-            ) : (
-              <Card>
-                <CardContent className="text-center py-12">
-                  <User className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500">Select a creator to view details</p>
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="text-center py-12">
+                <User className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-500">Select a creator to view details</p>
+                {safeCreators.length === 0 && (
                   <Button className="mt-4" onClick={() => setIsCreating(true)}>
                     <Plus className="w-4 h-4 mr-2" />
-                    Add New Creator
+                    Add First Creator
                   </Button>
-                </CardContent>
-              </Card>
-            )}
-          </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Category Manager Modal */}
       <CategoryManager

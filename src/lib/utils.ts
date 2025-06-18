@@ -32,5 +32,13 @@ export const safeLocalStorage = {
     } catch (e) {
       console.error('Error setting localStorage:', e);
     }
+  },
+  removeItem: (key: string): void => {
+    if (!isBrowser) return;
+    try {
+      localStorage.removeItem(key);
+    } catch (e) {
+      console.error('Error removing from localStorage:', e);
+    }
   }
 };

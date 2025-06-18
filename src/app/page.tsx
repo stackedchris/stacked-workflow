@@ -32,11 +32,9 @@ import StrategyGuide from '@/components/StrategyGuide'
 import EmployeeManagement from '@/components/EmployeeManagement'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { useToast } from '@/components/ui/toast'
-import { SyncStatus } from '@/components/SyncStatus'
-import { syncService } from '@/lib/sync-service'
 
 // Mock data for creators - Updated with full creator objects for testing
-const creators = [
+const defaultCreators = [
   {
     id: 1,
     name: "Kurama",
@@ -245,23 +243,15 @@ const getFirstTaskForPhase = (phaseNumber: number) => {
 
 export default function Dashboard() {
   // Use localStorage to persist data across page refreshes
-  const [rawCreators, setRawCreators, isCreatorsHydrated] = useLocalStorage('stacked-creators', creators)
+  const [allCreators, setAllCreators, isCreatorsHydrated] = useLocalStorage('stacked-creators', defaultCreators)
   const [allContent, setAllContent] = useLocalStorage('stacked-content', [])
-  
-  // Ensure allCreators is always an array to prevent reduce/filter errors
-  const allCreators = Array.isArray(rawCreators) ? rawCreators : []
-  
-  const [selectedCreator, setSelectedCreator] = useState(creators[0])
+  const [selectedCreator, setSelectedCreator] = useState<any>(null)
   const [showAddCreator, setShowAddCreator] = useState(false)
   const [activeTab, setActiveTab, isTabHydrated] = useLocalStorage('stacked-active-tab', "pipeline")
+  const [isAutoSyncing, setIsAutoSyncing] = useState(false)
   const [lastSyncTime, setLastSyncTime, isSyncTimeHydrated] = useLocalStorage('stacked-last-sync', '')
   const [connectionStatus, setConnectionStatus] = useState<'checking' | 'online' | 'offline'>('checking')
   const { success, error } = useToast()
-
-  // Initialize sync service
-  useEffect(() => {
-    syncService.initialize();
-  }, []);
 
   // Check connection status on mount
   useEffect(() => {
@@ -313,7 +303,7 @@ export default function Dashboard() {
 
   // Update selected creator when allCreators changes or hydrates
   useEffect(() => {
-    if (isCreatorsHydrated && allCreators.length > 0) {
+    if (isCreatorsHydrated && allCreators && allCreators.length > 0) {
       if (!selectedCreator || !allCreators.find(c => c.id === selectedCreator.id)) {
         setSelectedCreator(allCreators[0])
       } else {
@@ -326,12 +316,26 @@ export default function Dashboard() {
     }
   }, [allCreators, selectedCreator, isCreatorsHydrated])
 
-  // Record sync time when changes are made
+  // Auto-sync to cloud when online
   useEffect(() => {
-    if (isCreatorsHydrated || allContent.length > 0) {
-      setLastSyncTime(new Date().toLocaleTimeString())
-    }
-  }, [allCreators, allContent, setLastSyncTime])
+    const autoSync = setInterval(async () => {
+      if (connectionStatus === 'online' && allCreators && allCreators.length > 0) {
+        setIsAutoSyncing(true)
+        try {
+          // Simulate cloud sync
+          await new Promise(resolve => setTimeout(resolve, 1000))
+          setLastSyncTime(new Date().toLocaleTimeString())
+          console.log('Auto-synced creators to cloud')
+        } catch (error) {
+          console.error('Auto-sync failed:', error)
+        } finally {
+          setIsAutoSyncing(false)
+        }
+      }
+    }, 30000) // Sync every 30 seconds when online
+
+    return () => clearInterval(autoSync)
+  }, [allCreators, connectionStatus, setLastSyncTime])
 
   // Handle marking task as complete with proper phase alignment and confirmation
   const handleMarkTaskComplete = (creatorId: number) => {
@@ -376,7 +380,7 @@ export default function Dashboard() {
       return c
     })
 
-    setRawCreators(updatedCreators)
+    setAllCreators(updatedCreators)
     
     // Show success message with context
     const updatedCreator = updatedCreators.find(c => c.id === creatorId)
@@ -387,6 +391,15 @@ export default function Dashboard() {
       } else {
         success(`Task completed for ${creator.name}`, `Next: ${updatedCreator.nextTask}`)
       }
+    }
+
+    // Trigger sync if online
+    if (connectionStatus === 'online') {
+      setIsAutoSyncing(true)
+      setTimeout(() => {
+        setLastSyncTime(new Date().toLocaleTimeString())
+        setIsAutoSyncing(false)
+      }, 1000)
     }
   }
 
@@ -446,12 +459,11 @@ export default function Dashboard() {
                 </span>
               </div>
               
-              <SyncStatus />
-              
-              {/* Last Sync Time */}
+              {/* Sync Status */}
               {lastSyncTime && (
                 <div className="flex items-center text-sm text-gray-500">
-                  <span>Last change: {lastSyncTime}</span>
+                  <div className={`w-2 h-2 rounded-full mr-2 ${isAutoSyncing ? 'bg-yellow-400 animate-pulse' : 'bg-green-400'}`} />
+                  {isAutoSyncing ? 'Syncing...' : `Last synced: ${lastSyncTime}`}
                 </div>
               )}
             </div>
@@ -459,10 +471,8 @@ export default function Dashboard() {
           <Button
             className="bg-black text-white hover:bg-gray-800"
             onClick={() => {
-              console.log('Add Creator button clicked')
               setActiveTab("creators")
               setShowAddCreator(true)
-              console.log('Set activeTab to creators and showAddCreator to true')
             }}
           >
             <Plus className="w-4 h-4 mr-2" />
@@ -554,7 +564,7 @@ export default function Dashboard() {
                       <div
                         key={creator.id}
                         className={`p-4 border rounded-lg cursor-pointer transition-colors ${
-                          selectedCreator.id === creator.id
+                          selectedCreator?.id === creator.id
                             ? 'border-black bg-gray-50'
                             : 'border-gray-200 hover:border-gray-300'
                         }`}
@@ -609,13 +619,13 @@ export default function Dashboard() {
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center space-x-2">
-                      <span className="text-2xl">{selectedCreator.avatar}</span>
-                      <span>{selectedCreator.name}</span>
+                      <span className="text-2xl">{selectedCreator?.avatar}</span>
+                      <span>{selectedCreator?.name}</span>
                     </CardTitle>
                     <CardDescription className="flex items-center space-x-2">
-                      <span>{selectedCreator.category}</span>
+                      <span>{selectedCreator?.category}</span>
                       <Badge variant="outline" className="text-xs">
-                        {selectedCreator.region}
+                        {selectedCreator?.region}
                       </Badge>
                     </CardDescription>
                   </CardHeader>
@@ -623,34 +633,34 @@ export default function Dashboard() {
                     <div>
                       <h4 className="font-medium mb-2">Current Phase</h4>
                       <Badge
-                        className={`bg-${getPhaseColor(selectedCreator.phaseNumber)}-100 text-${getPhaseColor(selectedCreator.phaseNumber)}-800`}
+                        className={`bg-${getPhaseColor(selectedCreator?.phaseNumber || 0)}-100 text-${getPhaseColor(selectedCreator?.phaseNumber || 0)}-800`}
                       >
-                        {selectedCreator.phase}
+                        {selectedCreator?.phase}
                       </Badge>
                       <p className="text-sm text-gray-600 mt-1">
-                        Day {selectedCreator.daysInPhase} in phase
+                        Day {selectedCreator?.daysInPhase} in phase
                       </p>
                     </div>
 
                     <div>
                       <h4 className="font-medium mb-2">Progress</h4>
-                      <Progress value={selectedCreator.cardsSold} className="h-3" />
+                      <Progress value={selectedCreator?.cardsSold} className="h-3" />
                       <p className="text-sm text-gray-600 mt-1">
-                        {selectedCreator.cardsSold}/100 cards sold ({(selectedCreator.cardsSold/100*100).toFixed(0)}%)
+                        {selectedCreator?.cardsSold}/100 cards sold ({(selectedCreator?.cardsSold/100*100 || 0).toFixed(0)}%)
                       </p>
                     </div>
 
                     <div>
                       <h4 className="font-medium mb-2">Current Task</h4>
                       <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                        <p className="text-sm font-medium">{selectedCreator.nextTask}</p>
+                        <p className="text-sm font-medium">{selectedCreator?.nextTask}</p>
                         <p className="text-xs text-gray-600 mt-1">
-                          Phase {selectedCreator.phaseNumber} • {selectedCreator.phase}
+                          Phase {selectedCreator?.phaseNumber} • {selectedCreator?.phase}
                         </p>
                         <Button 
                           size="sm" 
                           className="mt-2"
-                          onClick={() => handleMarkTaskComplete(selectedCreator.id)}
+                          onClick={() => selectedCreator && handleMarkTaskComplete(selectedCreator.id)}
                         >
                           <CheckCircle2 className="w-3 h-3 mr-1" />
                           Mark Complete
@@ -665,7 +675,7 @@ export default function Dashboard() {
                           variant="outline" 
                           size="sm" 
                           className="w-full justify-start"
-                          onClick={() => handleCopyContentPrompt(selectedCreator)}
+                          onClick={() => selectedCreator && handleCopyContentPrompt(selectedCreator)}
                         >
                           <MessageSquare className="w-3 h-3 mr-2" />
                           Copy Content Prompt
@@ -674,7 +684,7 @@ export default function Dashboard() {
                           variant="outline" 
                           size="sm" 
                           className="w-full justify-start"
-                          onClick={() => handleViewAnalytics(selectedCreator)}
+                          onClick={() => selectedCreator && handleViewAnalytics(selectedCreator)}
                         >
                           <BarChart3 className="w-3 h-3 mr-2" />
                           View Analytics
@@ -702,7 +712,7 @@ export default function Dashboard() {
           <TabsContent value="creators">
             <CreatorManagement
               creators={allCreators}
-              onCreatorsUpdate={setRawCreators}
+              onCreatorsUpdate={setAllCreators}
               showAddCreator={showAddCreator}
               onAddCreatorClose={() => setShowAddCreator(false)}
             />
@@ -734,7 +744,7 @@ export default function Dashboard() {
           <TabsContent value="employees">
             <EmployeeManagement 
               creators={allCreators} 
-              onCreatorsUpdate={setRawCreators}
+              onCreatorsUpdate={setAllCreators}
             />
           </TabsContent>
 

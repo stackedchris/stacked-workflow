@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { useLocalStorage } from './useLocalStorage'
-import { syncService } from '@/lib/sync-service'
 
 export interface CreatorCategory {
   id: string
@@ -20,25 +19,7 @@ const defaultCategories: CreatorCategory[] = [
 ]
 
 export function useCategories() {
-  const [rawCategories, setRawCategories] = useLocalStorage<CreatorCategory[]>('stacked-categories', defaultCategories)
-  
-  // Ensure categories is always an array to prevent errors
-  const categories = Array.isArray(rawCategories) ? rawCategories : defaultCategories
-
-  // Subscribe to sync events for categories
-  useEffect(() => {
-    const cleanup = syncService.on('sync', (event: any) => {
-      if (event.type === 'categories' && event.action === 'update' && event.userId !== 'local') {
-        setRawCategories(event.data);
-      }
-    });
-    
-    return () => {
-      if (cleanup && typeof cleanup === 'function') {
-        cleanup();
-      }
-    };
-  }, [setRawCategories]);
+  const [categories, setCategories] = useLocalStorage<CreatorCategory[]>('stacked-categories', defaultCategories)
 
   const addCategory = (category: Omit<CreatorCategory, 'id' | 'createdAt'>) => {
     const newCategory: CreatorCategory = {
@@ -46,45 +27,18 @@ export function useCategories() {
       id: category.name.toLowerCase().replace(/\s+/g, '-'),
       createdAt: new Date().toISOString()
     }
-    
-    const updatedCategories = [...categories, newCategory];
-    setRawCategories(updatedCategories)
-    
-    // Emit sync event
-    syncService.emitSyncEvent({
-      type: 'categories',
-      action: 'update',
-      data: updatedCategories
-    });
-    
+    setCategories([...categories, newCategory])
     return newCategory
   }
 
   const updateCategory = (id: string, updates: Partial<CreatorCategory>) => {
-    const updatedCategories = categories.map(cat => 
+    setCategories(categories.map(cat => 
       cat.id === id ? { ...cat, ...updates } : cat
-    );
-    
-    setRawCategories(updatedCategories)
-    
-    // Emit sync event
-    syncService.emitSyncEvent({
-      type: 'categories',
-      action: 'update',
-      data: updatedCategories
-    });
+    ))
   }
 
   const deleteCategory = (id: string) => {
-    const updatedCategories = categories.filter(cat => cat.id !== id);
-    setRawCategories(updatedCategories)
-    
-    // Emit sync event
-    syncService.emitSyncEvent({
-      type: 'categories',
-      action: 'update',
-      data: updatedCategories
-    });
+    setCategories(categories.filter(cat => cat.id !== id))
   }
 
   const getCategoryByName = (name: string) => {
